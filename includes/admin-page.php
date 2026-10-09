@@ -70,6 +70,22 @@ add_action( 'admin_post_lccb_brief', function () {
 	lccb_redirect_back( array( 'title' => 'Site brief', 'ok' => (bool) $path, 'steps' => array( array( 'ok' => (bool) $path, 'text' => $path ? "Refreshed the managed block in $path" : 'Could not write CLAUDE.md' ) ) ) );
 } );
 
+add_action( 'admin_post_lccb_templates', function () {
+	lccb_guard( 'lccb_templates' );
+	$raw   = isset( $_POST['template_dirs'] ) ? (string) wp_unslash( $_POST['template_dirs'] ) : ''; // phpcs:ignore WordPress.Security.NonceVerification
+	$r     = lccb_tpl_library_save( preg_split( '/\r?\n/', $raw ) );
+	$found = lccb_tpl_library( true );
+	$steps = array( array( 'ok' => true, 'text' => sprintf( 'Saved %d folder(s); found %d template(s). Every connected site on this Mac uses this library.', count( $r['saved'] ), count( $found ) ) ) );
+	foreach ( $r['rejected'] as $bad ) {
+		$steps[] = array( 'ok' => false, 'text' => "Skipped \"$bad\": not a folder or .zip inside your home folder." );
+	}
+	if ( lccb_is_connected() ) {
+		lccb_write_site_brief();
+		$steps[] = array( 'ok' => true, 'text' => 'Site brief refreshed, so Claude knows the templates by name.' );
+	}
+	lccb_redirect_back( array( 'title' => 'Template library', 'ok' => ! $r['rejected'], 'steps' => $steps ) );
+} );
+
 add_action( 'admin_post_lccb_paths', function () {
 	lccb_guard( 'lccb_paths' );
 	$clean = function ( $key, $bin ) {
@@ -203,6 +219,35 @@ function lccb_render_page() {
 				</form>
 			<?php endif; ?>
 		</div>
+
+		<?php
+		$home    = lccb_home_dir();
+		$tidy    = function ( $p ) use ( $home ) {
+			return 0 === strpos( $p, $home . '/' ) ? '~' . substr( $p, strlen( $home ) ) : $p;
+		};
+		$lib_dir = array_map( $tidy, lccb_tpl_library_dirs() );
+		$lib     = $lib_dir ? lccb_tpl_library() : array();
+		?>
+		<h2 style="margin-top:32px">Template library</h2>
+		<p style="max-width:760px">Folders where you keep HTML templates (bought or downloaded, as folders or .zip files). Claude then knows them by name: ask for <em>"the beauty-salon demo"</em> and it finds it, without searching your disk. One folder per line; a folder can be a template itself or hold several. Shared by every connected site on this Mac. Templates are only ever read.</p>
+		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="max-width:760px">
+			<input type="hidden" name="action" value="lccb_templates">
+			<?php wp_nonce_field( 'lccb_templates' ); ?>
+			<textarea name="template_dirs" rows="3" class="large-text code" placeholder="~/Templates&#10;~/Downloads"><?php echo esc_textarea( implode( "\n", $lib_dir ) ); ?></textarea>
+			<p><?php submit_button( 'Save and scan', 'secondary', 'submit', false ); ?></p>
+		</form>
+		<?php if ( $lib ) : ?>
+			<table class="widefat striped" style="max-width:760px">
+				<thead><tr><th>Name Claude uses</th><th>Pages</th><th>Location</th></tr></thead>
+				<tbody>
+				<?php foreach ( $lib as $t ) : ?>
+					<tr><td><code><?php echo esc_html( $t['name'] ); ?></code></td><td><?php echo (int) $t['pages']; ?></td><td><code><?php echo esc_html( $tidy( $t['path'] ) ); ?></code><?php echo 'zip' === $t['kind'] ? ' (zip)' : ''; ?></td></tr>
+				<?php endforeach; ?>
+				</tbody>
+			</table>
+		<?php elseif ( $lib_dir ) : ?>
+			<p><em>No templates found in those folders (a template needs an index.html within a few folders of its top).</em></p>
+		<?php endif; ?>
 
 		<details style="max-width:900px;margin-top:24px">
 			<summary style="cursor:pointer;font-weight:600">Advanced</summary>

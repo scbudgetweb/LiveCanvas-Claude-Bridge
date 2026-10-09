@@ -35,7 +35,7 @@ function lccb_tpl_slug( $path ) {
 	$path = rtrim( $path, '/' );
 	$name = preg_replace( '/\.zip$/i', '', basename( $path ) );
 	if ( preg_match( '/^(template|templates|html|dist|site|www|public|build|src|theme)$/i', $name ) ) {
-		$name = basename( dirname( $path ) ); // ~/sarah/template → "sarah"
+		$name = basename( dirname( $path ) ) . '-' . $name; // ~/sarah/template → "sarah-template"
 	}
 	$name = preg_replace( '/^themeforest-[A-Za-z0-9]+-/', '', $name );
 	$slug = sanitize_title( $name );
@@ -53,6 +53,8 @@ function lccb_tpl_resolve( $path ) {
 	}
 	if ( 0 === strpos( $path, '~/' ) ) {
 		$path = lccb_home_dir() . substr( $path, 1 );
+	} elseif ( '/' !== $path[0] && function_exists( 'lccb_tpl_library_lookup' ) ) {
+		$path = lccb_tpl_library_lookup( $path ); // a template's name in the library
 	}
 	$real = realpath( $path );
 	if ( ! $real || ! is_readable( $real ) ) {
@@ -62,8 +64,9 @@ function lccb_tpl_resolve( $path ) {
 	if ( 0 !== strpos( $real, $home . '/' ) ) {
 		throw new Exception( 'Templates must be somewhere in your home folder.' );
 	}
-	$slug = lccb_tpl_slug( $real );
-	$src  = $real;
+	$lib_name = function_exists( 'lccb_tpl_library_name_for' ) ? lccb_tpl_library_name_for( $real ) : null;
+	$slug     = $lib_name ? $lib_name : lccb_tpl_slug( $real );
+	$src      = $real;
 	if ( is_file( $real ) ) {
 		if ( ! preg_match( '/\.zip$/i', $real ) ) {
 			throw new Exception( 'That file isn\'t a .zip. Give a folder or a .zip.' );

@@ -160,6 +160,7 @@
 		lc_screenshot: ["Screenshot", (i) => [i.area || "visible", i.width ? i.width + "px" : "", i.selector || ""].filter(Boolean).join(" · ")],
 		lc_inspect: ["Inspect", (i) => i.selector],
 		lc_responsive_check: ["Responsive check", (i) => [(i.widths || [390, 768, 1200, 1440]).join("/") + "px", i.selector || ""].filter(Boolean).join(" · ")],
+		lc_html_templates: ["Template library", (i) => i.find || ""],
 		lc_html_template_scan: ["Scan template", (i) => (i.path || "").split("/").pop() + (i.filter ? " · " + i.filter : "")],
 		lc_html_template_read: ["Read template", (i) => [i.page || "index.html", i.section !== undefined ? "section " + i.section : "", i.strategy && i.strategy !== "auto" ? i.strategy : ""].filter(Boolean).join(" · ")],
 		lc_html_template_assets: ["Preview template import", (i) => (i.pages || []).join(", "), "preview"],

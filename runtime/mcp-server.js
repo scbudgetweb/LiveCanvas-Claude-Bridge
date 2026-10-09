@@ -350,7 +350,12 @@ server.registerTool("lc_apply_change", {
 
 // ───────────────────────── Start from an HTML template ─────────────────────────
 
-const tplPath = z.string().describe("The template's folder or .zip on this Mac (e.g. ~/Downloads/porto.zip or ~/projects/porto/HTML). Never modified.");
+const tplPath = z.string().describe("A template's name from the template library (see lc_html_templates, e.g. 'porto') or its folder/.zip path on this Mac. Never modified.");
+
+serverTool("lc_html_templates", "The user's HTML template library (folders they registered in WordPress › Tools › Claude Code): every template with its name, page count and path. With `find`, search page names across all templates (e.g. 'beauty-salon', 'pricing', 'contact'). Use this instead of searching the disk for templates. Read-only.", {
+	find: z.string().optional().describe("Words to look for in page file names, e.g. 'beauty salon'"),
+	refresh: z.boolean().optional().describe("Re-scan the library folders (otherwise cached for 10 minutes)"),
+}, "html_templates");
 
 serverTool("lc_html_template_scan", "Scan a bought/downloaded HTML template (folder or .zip): its CSS framework (Bootstrap and version, Tailwind, Bulma, Foundation, UIkit or hand-written, with evidence) and the recommended strategy, pages (grouped when there are hundreds) with section outlines, shared header/footer, CSS/JS and recognised libraries, fonts, images, likely design tokens to map onto Picostrap, and warnings (jQuery plugins, Bootstrap 4). Read-only.", {
 	path: tplPath,

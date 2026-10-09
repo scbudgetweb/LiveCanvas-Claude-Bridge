@@ -22,6 +22,7 @@ define( 'LCCB_READONLY_TOOLS', array(
 	'mcp__livecanvas__lc_inspect',
 	'mcp__livecanvas__lc_responsive_check',
 	'mcp__livecanvas__lc_lint',
+	'mcp__livecanvas__lc_html_templates',
 	'mcp__livecanvas__lc_html_template_scan',
 	'mcp__livecanvas__lc_html_template_read',
 	'mcp__livecanvas__lc_html_template_assets',

@@ -60,6 +60,7 @@ require_once LCCB_DIR . 'includes/ops-design.php';
 require_once LCCB_DIR . 'includes/ops-lint.php';
 require_once LCCB_DIR . 'includes/ops-template.php';
 require_once LCCB_DIR . 'includes/ops-template-assets.php';
+require_once LCCB_DIR . 'includes/ops-template-library.php';
 require_once LCCB_DIR . 'includes/ops-sections.php';
 require_once LCCB_DIR . 'includes/activity.php';
 require_once LCCB_DIR . 'includes/site-brief.php';

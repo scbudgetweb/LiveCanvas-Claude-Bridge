@@ -32,6 +32,7 @@ function lccb_ops_dispatch( $command, array $args ) {
 		'media_list'      => 'lccb_op_media_list',
 		'media_import'    => 'lccb_op_media_import',
 		'lint'            => 'lccb_op_lint',
+		'html_templates'  => 'lccb_op_html_templates',
 		'html_template_scan' => 'lccb_op_html_template_scan',
 		'html_template_read' => 'lccb_op_html_template_read',
 		'html_template_assets' => 'lccb_op_html_template_assets',

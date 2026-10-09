@@ -58,7 +58,13 @@ function lccb_site_brief_markdown() {
 	$out[] = '- Builder edits (`lc_edit_html`, `lc_edit_css`, …) are live in the preview but **not saved**. Only call `lc_save` when the user asks.';
 	$out[] = '- Site-level changes (pages, header/footer, templates, design tokens, media) are previewed first, and `lc_apply_change` writes them to the site **immediately**. They don\'t need `lc_save`, and the builder\'s Save or undo doesn\'t cover them. Undo them with `lc_audit_restore`.';
 	$out[] = '- If the user restores a checkpoint, re-read before editing again.';
-	$out[] = '- **Starting from an HTML template** (a folder or .zip on this Mac): `lc_html_template_scan` → `lc_html_template_read` (sections as LiveCanvas-ready HTML, converted to Bootstrap 5 where needed) → map its tokens with `lc_tokens_update` → `lc_html_template_assets` (CSS/JS into the child theme, images into the media library) → build pages → check each section with `lc_compare`. Everything imported lives in the theme and media library, so it outlives this plugin.';
+	$lib = function_exists( 'lccb_tpl_library' ) ? lccb_tpl_library() : array();
+	if ( $lib ) {
+		$out[] = '- **Template library** (the user\'s HTML templates; don\'t search the disk for templates): ' . implode( ', ', array_map( function ( $t ) {
+			return '`' . $t['name'] . '` (' . $t['pages'] . ' pages)';
+		}, array_slice( $lib, 0, 15 ) ) ) . '. Find pages across them with `lc_html_templates {find}`; pass a template\'s name as `path`.';
+	}
+	$out[] = '- **Starting from an HTML template** (from the library, or a folder or .zip on this Mac): `lc_html_template_scan` → `lc_html_template_read` (sections as LiveCanvas-ready HTML, converted to Bootstrap 5 where needed) → map its tokens with `lc_tokens_update` → `lc_html_template_assets` (CSS/JS into the child theme, images into the media library) → build pages → check each section with `lc_compare`. Everything imported lives in the theme and media library, so it outlives this plugin.';
 	$out[] = '- **Reusable sections** live in LiveCanvas\'s section library (`lc_sections_list`). Embed one with its shortcode rather than copying its HTML; `lc_section_replace_inline` swaps existing copies.';
 	$conv = $d['conventions'];
 	if ( $conv['classes_in_global_css'] || $conv['custom_properties'] ) {
