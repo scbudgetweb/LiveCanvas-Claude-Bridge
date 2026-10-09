@@ -27,6 +27,11 @@ Unofficial WordPress plugin that connects the [LiveCanvas](https://livecanvas.co
   - Global CSS and Global JS
   - changes go through LiveCanvas's own editor, so the preview updates live and LiveCanvas's undo and History panel keep working
   - nothing is saved until you click Save, or ask Claude to save
+- **Claude sees and understands the site:**
+  - `lc_site_context`: versions, theme and Picostrap design tokens, the site's own class and custom-property conventions, pages, header and footer, templates and menus, in one call, even without the builder open.
+  - `lc_screenshot`: Claude screenshots the preview at any width (e.g. 412px for mobile) to check its own work.
+  - `lc_inspect`: rendered HTML, computed styles and the CSS rules that actually match, including shortcode and plugin output such as Forminator forms.
+  - **An auto-generated site brief** in the site's `CLAUDE.md` (a managed block that never touches your own notes), so every Claude Code session starts out knowing the stack.
 - **Rollback:** before Claude's first change in each reply, the plugin saves a checkpoint of the page HTML, Global CSS and Global JS. **"↺ Restore to before this"** on your messages puts everything back. It also rewinds files Claude edited, such as theme files, using Claude Code's own file checkpoints.
 - **Works across sites:** one shared background service on your Mac serves every connected site. Each site only ever reaches its own builder.
 
@@ -55,7 +60,7 @@ It uses your own Claude Code installation and login. There's no API key, and the
    - installs the shared runtime and a secret token in `~/Library/Application Support/lc-claude-bridge/`
    - starts the background service, using launchd
    - registers the site
-   - writes the site's `.mcp.json`
+   - writes the site's `.mcp.json` and a site brief in `CLAUDE.md`
    - binds the site to this Mac
 4. Open a page in LiveCanvas. A green "Claude connected" pill appears in the toolbar, and the **CC Terminal** and **CC Chat** tabs appear in the code editor.
 
@@ -130,7 +135,7 @@ The version number lives in two places, `lc-claude-bridge.php` (`LCCB_VERSION`) 
 |---|---|
 | `lc-claude-bridge.php`, `includes/` | WordPress side: environment checks, Connect, the settings page, editor injection, cleanup mode |
 | `assets/` | Browser side: `bridge.js` (status pill and editor commands), `terminal.js`, `chat*.js` |
-| `runtime/` | Node side, copied to `~/Library/Application Support/lc-claude-bridge/runtime/<version>` on Connect: `hub.js`, `chat.js`, `mcp-server.js` |
+| `runtime/` | Node side, copied to `~/Library/Application Support/lc-claude-bridge/runtime/<version>` on Connect: `hub.js`, `chat.js`, `mcp-server.js`, plus `wp-run.php` (the PHP command-line runner for server-side tools) |
 | `build/` | `setup.sh` and `make-zip.sh` |
 
 ## Licence

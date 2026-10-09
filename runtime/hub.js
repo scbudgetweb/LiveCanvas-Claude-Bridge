@@ -26,6 +26,7 @@ const require = createRequire(import.meta.url);
 const pty = require("node-pty");
 const VERSION = JSON.parse(readFileSync(new URL("./package.json", import.meta.url))).version;
 const TIMEOUT_MS = 15000;
+const SLOW_CMDS = new Set(["screenshot"]); // whole-page captures can take a while
 const BUFFER_LIMIT = 256 * 1024;
 
 const boot = loadConfig();
@@ -105,10 +106,11 @@ function acceptMcp(socket, site) {
 			});
 		}
 		const hubId = `h${++seq}`;
+		const limit = SLOW_CMDS.has(msg.cmd) ? 60000 : TIMEOUT_MS;
 		const timer = setTimeout(() => {
 			pending.delete(hubId);
-			send(socket, { id: msg.id, ok: false, error: `Editor did not answer '${msg.cmd}' within ${TIMEOUT_MS / 1000}s` });
-		}, TIMEOUT_MS);
+			send(socket, { id: msg.id, ok: false, error: `Editor did not answer '${msg.cmd}' within ${limit / 1000}s` });
+		}, limit);
 		pending.set(hubId, { mcp: socket, editor: editor.socket, origId: msg.id, site, cmd: msg.cmd, timer });
 		send(editor.socket, { id: hubId, cmd: msg.cmd, args: msg.args || {} });
 	});

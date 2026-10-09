@@ -65,6 +65,12 @@ add_action( 'admin_post_lccb_disconnect', function () {
 	) );
 } );
 
+add_action( 'admin_post_lccb_brief', function () {
+	lccb_guard( 'lccb_brief' );
+	$path = lccb_write_site_brief();
+	lccb_redirect_back( array( 'title' => 'Site brief', 'ok' => (bool) $path, 'steps' => array( array( 'ok' => (bool) $path, 'text' => $path ? "Refreshed the managed block in $path" : 'Could not write CLAUDE.md' ) ) ) );
+} );
+
 add_action( 'admin_post_lccb_paths', function () {
 	lccb_guard( 'lccb_paths' );
 	$clean = function ( $key, $bin ) {
@@ -112,6 +118,8 @@ function lccb_status_rows() {
 	);
 	$rows[] = array( 'ok' => $health && in_array( lccb_site_id(), (array) $health['sites'], true ), 'label' => 'This site registered', 'detail' => lccb_site_id() . ' · ' . lccb_origin() );
 	$rows[] = array( 'ok' => lccb_claude_config_ok(), 'label' => 'Claude Code config (.mcp.json)', 'detail' => lccb_site_root() . '/.mcp.json' );
+	$brief  = is_file( lccb_brief_path() ) && false !== strpos( (string) file_get_contents( lccb_brief_path() ), '<!-- lccb:start' );
+	$rows[] = array( 'ok' => $brief, 'label' => 'Site brief (CLAUDE.md)', 'detail' => $brief ? 'Managed block present · refresh after big changes to the site' : 'Not written yet (Connect writes it)' );
 	$rows[] = array(
 		'ok'     => lccb_is_connected(),
 		'label'  => 'Bound to this Mac, folder and address',
@@ -168,6 +176,13 @@ function lccb_render_page() {
 				<?php wp_nonce_field( 'lccb_connect' ); ?>
 				<?php submit_button( $connected ? 'Re-check & repair' : 'Connect', 'primary', 'submit', false ); ?>
 			</form>
+			<?php if ( $connected ) : ?>
+				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+					<input type="hidden" name="action" value="lccb_brief">
+					<?php wp_nonce_field( 'lccb_brief' ); ?>
+					<?php submit_button( 'Refresh site brief', 'secondary', 'submit', false ); ?>
+				</form>
+			<?php endif; ?>
 			<?php if ( $connected || lccb_binding_is_stale() ) : ?>
 				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" onsubmit="return confirm('Disconnect this site from Claude Code? Its CC Terminal tab session will end.');">
 					<input type="hidden" name="action" value="lccb_disconnect">

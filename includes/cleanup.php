@@ -30,6 +30,9 @@ function lccb_leftovers() {
 	if ( false !== get_option( LCCB_BINDING_OPTION, false ) || false !== get_option( LCCB_SETTINGS_OPTION, false ) ) {
 		$found[] = 'plugin settings in the database';
 	}
+	if ( is_file( $root . '/CLAUDE.md' ) && false !== strpos( (string) file_get_contents( $root . '/CLAUDE.md' ), '<!-- lccb:start' ) ) {
+		$found[] = 'CLAUDE.md (site brief block)';
+	}
 	$found[] = 'the plugin folder (wp-content/plugins/' . basename( LCCB_DIR ) . ')';
 	return $found;
 }
@@ -145,6 +148,12 @@ function lccb_cleanup() {
 
 	if ( is_dir( $dir ) ) {
 		$steps[] = array( 'ok' => true, 'text' => 'Kept the .claude folder: it holds your own Claude Code files (e.g. your saved permissions or plans), not the plugin\'s. Delete it yourself if it shouldn\'t be on this server.' );
+	}
+
+	// CLAUDE.md: only our managed block.
+	$brief = lccb_remove_site_brief();
+	if ( $brief ) {
+		$steps[] = array( 'ok' => true, 'text' => 'deleted' === $brief ? 'Deleted CLAUDE.md (it only contained the site brief)' : 'Removed the site brief from CLAUDE.md (your own notes kept)' );
 	}
 
 	// Database.

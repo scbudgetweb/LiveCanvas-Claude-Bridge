@@ -17,6 +17,9 @@ define( 'LCCB_READONLY_TOOLS', array(
 	'mcp__livecanvas__lc_read_css',
 	'mcp__livecanvas__lc_read_js',
 	'mcp__livecanvas__lc_select',
+	'mcp__livecanvas__lc_site_context',
+	'mcp__livecanvas__lc_screenshot',
+	'mcp__livecanvas__lc_inspect',
 ) );
 define( 'LCCB_HUB_PORT', defined( 'LC_CLAUDE_BRIDGE_PORT' ) ? (int) LC_CLAUDE_BRIDGE_PORT : 8770 );
 
@@ -143,6 +146,26 @@ function lccb_login_shell_path() {
 	return $dirs;
 }
 
+/** PHP CLI for runtime/wp-run.php: Herd's first, then Homebrew / system. @return array{path: string, version: string}|null */
+function lccb_find_php() {
+	$candidates = array(
+		lccb_home_dir() . '/Library/Application Support/Herd/bin/php',
+		'/opt/homebrew/bin/php',
+		'/usr/local/bin/php',
+		'/usr/bin/php',
+	);
+	foreach ( $candidates as $path ) {
+		if ( ! is_file( $path ) || ! is_executable( $path ) ) {
+			continue;
+		}
+		$r = lccb_run( array( $path, '-r', 'echo PHP_VERSION;' ), array( 'PATH' => dirname( $path ) . ':/usr/bin:/bin', 'HOME' => lccb_home_dir() ) );
+		if ( 0 === $r['code'] && preg_match( '/^\d+\.\d+/', $r['out'] ) ) {
+			return array( 'path' => $path, 'version' => $r['out'] );
+		}
+	}
+	return null;
+}
+
 /** PATH for the hub's claude sessions (and their MCP servers / tools). */
 function lccb_exec_path( $node, $claude ) {
 	$dirs = array();
@@ -239,16 +262,21 @@ function lccb_installed_runtime_version() {
 	return isset( $pkg['version'] ) ? $pkg['version'] : '';
 }
 
-function lccb_register_site( $node, $claude ) {
+function lccb_register_site( $node, $claude, $php = null ) {
 	$file   = lccb_support_dir() . '/config.json';
 	$config = lccb_read_json( $file );
 	$config['port']       = LCCB_HUB_PORT;
 	$config['claudePath'] = $claude['path'];
 	$config['path']       = lccb_exec_path( $node, $claude );
+	if ( $php ) {
+		$config['phpPath'] = $php['path'];
+	}
 	$config['sites']      = isset( $config['sites'] ) && is_array( $config['sites'] ) ? $config['sites'] : array();
 	$config['sites'][ lccb_site_id() ] = array(
 		'root'   => lccb_site_root(),
 		'origin' => lccb_origin(),
+		// The admin the server-side tools act as (wp-run.php). CLI connects fall back to the first administrator.
+		'userId' => get_current_user_id() ? get_current_user_id() : 0,
 	);
 	return lccb_write_json( $file, $config, 0600 );
 }
@@ -439,7 +467,9 @@ function lccb_connect( $force_reinstall = false ) {
 	} else {
 		$step( true, 'Runtime ' . LCCB_VERSION . ' already installed' );
 	}
-	if ( ! $step( lccb_register_site( $node, $claude ), 'Registered site "' . lccb_site_id() . '" (' . lccb_origin() . ')' ) ) {
+	$php = lccb_find_php();
+	$step( (bool) $php, $php ? "PHP {$php['version']} for site tools ({$php['path']})" : 'PHP CLI not found: site-level tools (lc_site_context) will be unavailable' );
+	if ( ! $step( lccb_register_site( $node, $claude, $php ), 'Registered site "' . lccb_site_id() . '" (' . lccb_origin() . ')' ) ) {
 		return $fail();
 	}
 	if ( $force ) {
@@ -453,6 +483,8 @@ function lccb_connect( $force_reinstall = false ) {
 	if ( ! $step( lccb_write_claude_config( $node ), 'Claude Code config: .mcp.json + .claude/settings.local.json' ) ) {
 		return $fail();
 	}
+	$brief = lccb_write_site_brief();
+	$step( (bool) $brief, $brief ? 'Site brief written to CLAUDE.md (managed block)' : 'Could not write CLAUDE.md' );
 	update_option( LCCB_BINDING_OPTION, lccb_binding_value(), false );
 	$step( lccb_is_connected(), 'Bound to this Mac, folder and address' );
 
@@ -470,6 +502,7 @@ function lccb_connect( $force_reinstall = false ) {
 function lccb_disconnect() {
 	$remaining = lccb_unregister_site();
 	lccb_remove_claude_config();
+	lccb_remove_site_brief();
 	delete_option( LCCB_BINDING_OPTION );
 	if ( 0 === $remaining ) {
 		lccb_remove_service( LCCB_SERVICE_LABEL );

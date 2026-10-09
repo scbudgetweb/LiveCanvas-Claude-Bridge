@@ -207,11 +207,133 @@
 			return { ...(await writeGlobal("js", text)), replacements: count };
 		},
 
+		/** Screenshot the preview for Claude, optionally at a temporary width. */
+		async screenshot({ area = "visible", width, selector }) {
+			const A = window.lccbChatAttach;
+			if (!A) throw new Error("Screenshot support isn't loaded in the editor.");
+			const iframe = document.getElementById("previewiframe");
+			if (!iframe) throw new Error("The LiveCanvas preview isn't available.");
+			if (area === "element" && !selector) throw new Error("area 'element' needs a selector.");
+			const prev = { width: iframe.style.width, height: iframe.style.height, scroll: iframe.contentWindow.scrollY };
+			const settle = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(r, 450))));
+			try {
+				if (width) { iframe.style.width = width + "px"; await settle(); }
+				if (selector && area !== "element") {
+					const el = iframe.contentDocument.querySelector(selector);
+					if (!el) throw new Error(`Nothing in the preview matches "${selector}".`);
+					el.scrollIntoView({ block: "start" });
+					await settle();
+				}
+				const img = area === "element" ? await A.captureElement(selector) : await A.capturePreview(area === "page" ? "page" : "visible");
+				return {
+					media_type: img.media_type, data: img.data, width: img.width, height: img.height,
+					viewport: iframe.clientWidth,
+					note: area === "page" ? "Whole page" : area === "element" ? `Element ${selector}` : "Visible area",
+				};
+			} finally {
+				iframe.style.width = prev.width;
+				iframe.style.height = prev.height;
+				if (width || selector) { await settle(); iframe.contentWindow.scrollTo(0, prev.scroll); }
+			}
+		},
+
+		/** Rendered-preview inspection: markup, box, computed styles, children, matching CSS rules. */
+		async inspect({ selector, depth = 1, all = false }) {
+			const iframe = document.getElementById("previewiframe");
+			if (!iframe || !iframe.contentDocument) throw new Error("The LiveCanvas preview isn't available.");
+			const pdoc = iframe.contentDocument;
+			const pwin = iframe.contentWindow;
+			let matches;
+			try { matches = all ? [...pdoc.querySelectorAll(selector)].slice(0, 10) : [pdoc.querySelector(selector)].filter(Boolean); }
+			catch (e) { throw new Error(`Invalid selector: ${selector}`); }
+			if (!matches.length) throw new Error(`Nothing in the rendered preview matches "${selector}".`);
+			const total = pdoc.querySelectorAll(selector).length;
+			return {
+				selector,
+				matched: total,
+				viewport: { width: iframe.clientWidth, height: iframe.clientHeight, scrollY: Math.round(pwin.scrollY) },
+				elements: matches.map((el) => inspectElement(el, pwin, depth)),
+				note: "rules are in stylesheet order; a later rule with equal or higher specificity wins, inline styles and !important beat both.",
+			};
+		},
+
 		async save() {
 			window.jQuery("#main-save").trigger("click");
 			return { triggered: true, note: "Save triggered (HTML, Global CSS and Global JS)." };
 		},
 	};
+
+	// ───────────────────────── Inspect helpers ─────────────────────────
+
+	const INSPECT_PROPS = [
+		"display", "position", "box-sizing", "width", "height", "margin", "padding", "border", "border-radius",
+		"color", "background-color", "background-image", "font-family", "font-size", "font-weight", "line-height",
+		"letter-spacing", "text-transform", "text-align", "gap", "flex-direction", "justify-content", "align-items",
+		"grid-template-columns", "opacity", "box-shadow", "z-index", "overflow", "transition",
+	];
+
+	function brief(el) {
+		const r = el.getBoundingClientRect();
+		return {
+			tag: el.tagName.toLowerCase(),
+			id: el.id || undefined,
+			classes: typeof el.className === "string" && el.className.trim() ? el.className.trim() : undefined,
+			text: (el.childElementCount ? "" : (el.textContent || "").trim().slice(0, 80)) || undefined,
+			size: `${Math.round(r.width)}×${Math.round(r.height)}`,
+		};
+	}
+
+	function childTree(el, depth) {
+		if (depth <= 0) return undefined;
+		const kids = [...el.children].filter((c) => !/^(script|style|template)$/i.test(c.tagName)).slice(0, 30);
+		return kids.map((c) => ({ ...brief(c), children: childTree(c, depth - 1) }));
+	}
+
+	function matchingRules(el, win) {
+		const out = [];
+		const sources = new Set();
+		const visit = (rules, source, media) => {
+			for (const rule of rules) {
+				if (out.length >= 40) return;
+				if (rule.selectorText !== undefined && rule.style) {
+					let hit = false;
+					try { hit = el.matches(rule.selectorText); } catch (_) {}
+					if (hit) out.push({ selector: rule.selectorText, source, media: media || undefined, css: rule.style.cssText.slice(0, 400) });
+				} else if (rule.cssRules) {
+					const cond = rule.conditionText || (rule.media && rule.media.mediaText) || "";
+					if (rule.type === 4 /* MEDIA */ && cond && !win.matchMedia(cond).matches) continue;
+					visit(rule.cssRules, source, cond || media);
+				}
+			}
+		};
+		for (const sheet of win.document.styleSheets) {
+			const source = sheet.href ? sheet.href.split("/").slice(-2).join("/").split("?")[0] : `inline <style${sheet.ownerNode && sheet.ownerNode.id ? " id=" + sheet.ownerNode.id : ""}>`;
+			try { visit(sheet.cssRules, source, ""); } catch (_) { sources.add(source); } // cross-origin sheet
+		}
+		return { rules: out, unreadable: [...sources] };
+	}
+
+	function inspectElement(el, win, depth) {
+		const r = el.getBoundingClientRect();
+		const cs = win.getComputedStyle(el);
+		const computed = {};
+		for (const p of INSPECT_PROPS) {
+			const v = cs.getPropertyValue(p);
+			if (v && v !== "none" && v !== "normal" && v !== "auto" && v !== "0px" && v !== "rgba(0, 0, 0, 0)") computed[p] = v;
+		}
+		const html = el.outerHTML;
+		const m = matchingRules(el, win);
+		return {
+			...brief(el),
+			box: { x: Math.round(r.left), y: Math.round(r.top + win.scrollY), width: Math.round(r.width), height: Math.round(r.height) },
+			computed,
+			inline_style: el.getAttribute("style") || undefined,
+			rules: m.rules,
+			unreadable_stylesheets: m.unreadable.length ? m.unreadable : undefined,
+			children: childTree(el, depth),
+			html: html.length > 20000 ? html.slice(0, 20000) + `\n<!-- … ${html.length - 20000} more characters -->` : html,
+		};
+	}
 
 	// ───────────────────────── Checkpoints ─────────────────────────
 	// Before the first change of each Claude reply, snapshot page HTML + Global CSS + Global JS, so the user

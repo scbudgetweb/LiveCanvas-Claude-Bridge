@@ -154,5 +154,23 @@
 		}
 	}
 
-	window.lccbChatAttach = { fromBlob, capturePreview, captureExact, MAX_EDGE };
+	/** Capture just one rendered element of the preview (CSS selector in the preview document). */
+	async function captureElement(selector) {
+		if (!window.modernScreenshot) throw new Error("Screenshot library missing (assets/vendor/modern-screenshot.js).");
+		const iframe = previewFrame();
+		const doc = iframe.contentDocument;
+		const el = doc.querySelector(selector);
+		if (!el) throw new Error(`Nothing in the preview matches "${selector}".`);
+		const win = iframe.contentWindow;
+		let bg = win.getComputedStyle(el).backgroundColor;
+		if (!bg || bg === "rgba(0, 0, 0, 0)") bg = win.getComputedStyle(doc.body).backgroundColor;
+		const canvas = await window.modernScreenshot.domToCanvas(el, {
+			scale: 1,
+			backgroundColor: bg && bg !== "rgba(0, 0, 0, 0)" ? bg : "#ffffff",
+			timeout: 15000,
+		});
+		return prepareCanvas(canvas, "element.png", true);
+	}
+
+	window.lccbChatAttach = { fromBlob, capturePreview, captureElement, captureExact, MAX_EDGE };
 })();

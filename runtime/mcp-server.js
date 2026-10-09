@@ -13,7 +13,9 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { WebSocket } from "ws";
 import { z } from "zod";
-import { basename } from "node:path";
+import { basename, dirname, join } from "node:path";
+import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { loadConfig, readToken, log as baseLog } from "./lib.js";
 
 const argSite = process.argv.indexOf("--site");
@@ -76,7 +78,8 @@ function call(cmd, args = {}) {
 	if (!hub || hub.readyState !== 1) return Promise.reject(new Error(hubError || "Connecting to the LC Claude Bridge hub. Try again in a moment."));
 	const id = `m${++seq}`;
 	return new Promise((resolve, reject) => {
-		const timer = setTimeout(() => { pending.delete(id); reject(new Error(`No answer to '${cmd}' within ${TIMEOUT_MS / 1000}s`)); }, TIMEOUT_MS);
+		const limit = cmd === "screenshot" ? 65000 : TIMEOUT_MS;
+		const timer = setTimeout(() => { pending.delete(id); reject(new Error(`No answer to '${cmd}' within ${limit / 1000}s`)); }, limit);
 		pending.set(id, { resolve, reject, timer });
 		hub.send(JSON.stringify({ id, cmd, args }));
 	});
@@ -101,6 +104,48 @@ const server = new McpServer(
 );
 
 const json = (v) => ({ content: [{ type: "text", text: typeof v === "string" ? v : JSON.stringify(v, null, 2) }] });
+
+// ───────────────────────── Server-side ops (no builder needed): runtime/wp-run.php via PHP CLI ─────────────────────────
+
+const RUNNER = join(dirname(fileURLToPath(import.meta.url)), "wp-run.php");
+
+function wpRun(command, args = {}, timeoutMs = 60000) {
+	const config = loadConfig();
+	const php = config.phpPath;
+	if (!php) return Promise.reject(new Error("PHP CLI not configured. Click Re-check & repair in WordPress › Tools › Claude Code."));
+	return new Promise((resolve, reject) => {
+		const child = spawn(php, [RUNNER, SITE, command, JSON.stringify(args)], {
+			cwd: (config.sites[SITE] || {}).root || process.cwd(),
+			env: { HOME: process.env.HOME, USER: process.env.USER, PATH: config.path || process.env.PATH, LANG: "en_US.UTF-8" },
+			stdio: ["ignore", "pipe", "pipe"],
+		});
+		let out = "", err = "";
+		const timer = setTimeout(() => { child.kill(); reject(new Error(`WordPress command '${command}' timed out`)); }, timeoutMs);
+		child.stdout.on("data", (d) => (out += d));
+		child.stderr.on("data", (d) => (err += d));
+		child.on("error", (e) => { clearTimeout(timer); reject(e); });
+		child.on("close", (code) => {
+			clearTimeout(timer);
+			const i = out.lastIndexOf("__LCCB_RESULT__");
+			if (i < 0) return reject(new Error(`WordPress command '${command}' failed (exit ${code}): ${(err || out).trim().slice(-400)}`));
+			let r;
+			try { r = JSON.parse(out.slice(i + 15).trim()); } catch (e) { return reject(new Error("Unreadable result from WordPress")); }
+			r.ok ? resolve(r.result) : reject(new Error(r.error || "WordPress command failed"));
+		});
+	});
+}
+
+function serverTool(name, description, inputSchema, command, format = json) {
+	server.registerTool(name, { description, inputSchema }, async (args) => format(await wpRun(command, args)));
+}
+
+// Screenshots come back from the bridge as { media_type, data }; MCP returns them as image content Claude can see.
+const imageResult = (r) => ({
+	content: [
+		{ type: "image", data: r.data, mimeType: r.media_type },
+		{ type: "text", text: `Screenshot: ${r.width}×${r.height}px${r.viewport ? ` (preview width ${r.viewport}px)` : ""}${r.note ? ". " + r.note : ""}` },
+	],
+});
 
 function tool(name, description, inputSchema, cmd, format = json) {
 	server.registerTool(name, { description, inputSchema }, async (args) => format(await call(cmd, args)));
@@ -158,6 +203,36 @@ tool("lc_write_css", "Replace the entire Global CSS. Prefer lc_edit_css.", { css
 tool("lc_read_js", "Read the site-wide Global JS (LiveCanvas global script, loaded as type=module).", {}, "read_js", (r) => json(r.js));
 tool("lc_edit_js", "Edit Global JS by exact string replacement. Not saved; JS takes effect in the preview after a save and reload.", editArgs, "edit_js");
 tool("lc_write_js", "Replace the entire Global JS. Prefer lc_edit_js.", { js: z.string() }, "write_js");
+
+serverTool(
+	"lc_site_context",
+	"Everything about this WordPress site in one call (works without the builder open): WordPress/PHP/LiveCanvas/theme versions, Picostrap/WindPress/WooCommerce/ACF, design tokens (Picostrap SCSS variables, fonts, CSS bundle), class-name conventions and custom properties used on the site, all LiveCanvas pages, header/footer/global-JS partials, dynamic templates and menus. Use it before building something new so you reuse the site's own system.",
+	{},
+	"context"
+);
+
+tool(
+	"lc_screenshot",
+	"Screenshot the LiveCanvas preview so you can SEE the result of your changes (needs the builder open). Use it after visual edits, and check mobile with width 412 (tablet 768, desktop 1200 or 1440). area: 'visible' = what's in the viewport now, 'page' = the whole page top to bottom, 'element' = just the element matching `selector` (rendered preview selector, e.g. '#scHero' or '.sc-btn-pair'). The preview width is restored afterwards.",
+	{
+		area: z.enum(["visible", "page", "element"]).optional().describe("Default 'visible'"),
+		width: z.number().int().min(320).max(2560).optional().describe("Preview width in CSS px for this capture (e.g. 412 mobile). Omit to keep the current width."),
+		selector: z.string().optional().describe("CSS selector in the rendered preview (required for area 'element'; for 'visible' it's scrolled into view first)"),
+	},
+	"screenshot",
+	imageResult
+);
+
+tool(
+	"lc_inspect",
+	"Inspect the RENDERED preview (needs the builder open), including shortcode/plugin output that lc_read_html can't see (e.g. Forminator forms): the element's outer HTML, size/position, key computed styles, children, and the CSS rules that currently match it (selector + stylesheet), so you can write overrides that actually win. Selectors are for the rendered preview (classes/ids work best).",
+	{
+		selector: z.string().describe("CSS selector in the rendered preview, e.g. '.forminator-ui .forminator-button'"),
+		depth: z.number().int().min(0).max(3).optional().describe("How many levels of children to summarise (default 1)"),
+		all: z.boolean().optional().describe("Report every match (up to 10) instead of the first"),
+	},
+	"inspect"
+);
 
 tool(
 	"lc_save",
