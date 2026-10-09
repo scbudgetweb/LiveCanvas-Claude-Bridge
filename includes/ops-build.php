@@ -14,7 +14,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 define( 'LCCB_PREVIEW_TTL', 15 * MINUTE_IN_SECONDS );
-define( 'LCCB_EDITOR_ACTIVE_SECS', 120 );
+define( 'LCCB_EDITOR_ACTIVE_SECS', 60 ); // LiveCanvas's own editing-lock window
 
 // ───────────────────────── Helpers ─────────────────────────
 
@@ -23,9 +23,29 @@ function lccb_fingerprint( $snapshot ) {
 }
 
 /** Is this post open in a LiveCanvas editor right now (the editor pings while open)? */
+/**
+ * Is this post open in a LiveCanvas builder tab right now? The hub knows exactly which page the site's connected
+ * builder tab is on, so trust it when it answers. Without a connected tab, fall back to LiveCanvas's own editing lock
+ * (refreshed while a builder is open, but not cleared when a tab navigates away, hence only 60 seconds).
+ */
 function lccb_open_in_builder( $post_id ) {
-	$ts = (int) get_post_meta( $post_id, '_lc_last_activity_timestamp', true );
-	return $ts && ( time() - $ts ) < LCCB_EDITOR_ACTIVE_SECS;
+	static $open = false;
+	if ( false === $open ) {
+		$health = function_exists( 'lccb_health' ) ? lccb_health() : null;
+		$open   = is_array( $health ) && isset( $health['open'] ) && is_array( $health['open'] ) ? $health['open'] : null;
+	}
+	$site = lccb_site_id();
+	if ( is_array( $open ) && isset( $open[ $site ] ) && (int) $open[ $site ] === (int) $post_id ) {
+		return true;
+	}
+	$ts    = (int) get_post_meta( $post_id, '_lc_last_activity_timestamp', true );
+	$fresh = $ts && ( time() - $ts ) < LCCB_EDITOR_ACTIVE_SECS;
+	if ( ! is_array( $open ) ) {
+		return $fresh; // hub not answering: LiveCanvas's lock is all we have
+	}
+	// Every admin's builder tab connects to the hub, so it knows them all. Only a non-admin's tab (no bridge) is invisible.
+	$uid = (int) get_post_meta( $post_id, '_lc_last_activity_userid', true );
+	return $fresh && $uid && ! user_can( $uid, 'manage_options' );
 }
 
 /** LiveCanvas stores the inner HTML of main#lc-main, starting with a newline. Accept either form from Claude. */
@@ -181,7 +201,7 @@ function lccb_require_post( $id, $types ) {
 
 function lccb_refuse_if_open( $post_id, $what ) {
 	if ( lccb_open_in_builder( $post_id ) ) {
-		throw new Exception( "$what #$post_id is open in the LiveCanvas builder right now. Edit it there with lc_read_html / lc_edit_html (then lc_save), or close the builder and try again, so the two don't overwrite each other." );
+		throw new Exception( "$what #$post_id is open in the LiveCanvas builder right now. Edit it there with lc_read_html / lc_edit_html (then lc_save), or open another page in the builder (lc_open_page) and try again, so the two don't overwrite each other. If no builder has it open, LiveCanvas's editing lock clears within a minute." );
 	}
 }
 

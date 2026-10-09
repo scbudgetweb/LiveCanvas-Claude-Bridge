@@ -251,6 +251,8 @@ const http = createServer((req, res) => {
 			pid: process.pid,
 			sites: Object.keys(config.sites),
 			editors: [...editors.keys()],
+			// Which post each site's builder tab has open (WordPress uses it to know a page is being edited).
+			open: Object.fromEntries([...editors].filter(([, e]) => e.socket.readyState === 1 && e.info && e.info.postId).map(([site, e]) => [site, Number(e.info.postId)])),
 			terminals: [...terminals].filter(([, s]) => s.pty).map(([site]) => site),
 			chats: chat.running(),
 		}));
