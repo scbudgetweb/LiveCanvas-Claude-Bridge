@@ -42,6 +42,13 @@ Unofficial WordPress plugin that connects the [LiveCanvas](https://livecanvas.co
   - LiveCanvas dynamic templates and their display conditions
 
   Every change is a **preview first**: you see a diff and nothing is written. Only `lc_apply_change` writes, and Claude Code asks you to approve it. It refuses if the target changed since the preview, or if the page is open in a builder.
+- **Start from an HTML template** (a bought or downloaded template, as a folder or .zip on your Mac; it's never modified):
+  - `lc_html_template_scan` finds the framework (Bootstrap and its version, Tailwind, Bulma, Foundation, UIkit or hand-written CSS, with evidence), the pages (grouped, so an 800-page template is navigable), the shared header and footer, the libraries, the fonts and the likely design tokens to map onto Picostrap.
+  - `lc_html_template_read` returns any section as LiveCanvas-ready HTML. It strips scripts, renames Bootstrap 4 classes to Bootstrap 5, and maps Tailwind, Bulma and Foundation classes to Bootstrap 5 where that's mechanical, listing what's left for Claude to finish.
+  - `lc_html_template_assets` copies the template's own CSS, JS and fonts into the **child theme**, with a managed enqueue block in `functions.php`, and imports its images into the **media library**. Undo removes exactly what it added. You can scope the template's CSS under `.tpl-<name>` so it can't clash with Bootstrap.
+  - `lc_html_template_preview` and `lc_compare` render the original template next to the rebuilt section at 1200 and 390px, with the differences highlighted and a pixel-difference score.
+  - Everything imported lives in the theme and media library, so the site keeps working after you delete this plugin.
+- **Section library:** list, read, create and update LiveCanvas's reusable sections, see where each is used, and swap inline copies on pages for the section's shortcode (`lc_section_replace_inline`).
 - **Design tokens (Picostrap):**
   - Claude reads and changes the theme's SCSS variables (colours, fonts, sizes, `$enable-*` switches) and web-font links, with a preview first.
   - `lc_css_recompile` rebuilds the theme CSS with Picostrap's own compiler, from inside your builder tab, and refreshes the preview.

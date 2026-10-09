@@ -278,6 +278,64 @@
 			return summariseResponsive(runs, images, selector);
 		},
 
+		/** Screenshot a section of an original HTML template page (served same-origin from uploads/lccb-template-src). */
+		async template_shot({ url, selector, width = 1200 }) {
+			const { canvas, height } = await renderTemplateSection(url, selector, width);
+			const img = await window.lccbChatAttach.prepareCanvas(canvas, "template-section.png", true);
+			return { media_type: img.media_type, data: img.data, width: img.width, height: img.height, viewport: width, note: `Original template ${selector || "page"} (${Math.round(height)}px tall at ${width}px)` + (looksBlank(canvas) ? ". ⚠ " + BLANK_NOTE : "") };
+		},
+
+		/**
+		 * Compare an original template section with its rebuilt version in the builder at the same width(s):
+		 * side-by-side image (original | rebuilt | difference) and a pixel-difference score per width.
+		 */
+		async compare({ url, template_selector, preview_selector, widths }) {
+			const iframe = document.getElementById("previewiframe");
+			if (!iframe || !iframe.contentDocument) throw new Error("The LiveCanvas preview isn't available.");
+			if (!iframe.contentDocument.querySelector(preview_selector)) throw new Error(`Nothing in the preview matches "${preview_selector}".`);
+			const list = (Array.isArray(widths) && widths.length ? widths : [1200, 390]).map((w) => Math.max(320, Math.min(2560, w | 0))).slice(0, 3);
+			const prev = { width: iframe.style.width, scroll: iframe.contentWindow.scrollY };
+			const settle = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(r, 600))));
+			const results = [];
+			// Show reveal-on-scroll content in its final state, as in the template render (removed again below).
+			const freeze = iframe.contentDocument.createElement("style");
+			freeze.id = "lccb-freeze";
+			freeze.textContent = FREEZE_CSS;
+			iframe.contentDocument.head.appendChild(freeze);
+			try {
+				for (const w of list) {
+					const orig = await renderTemplateSection(url, template_selector, w);
+					iframe.style.width = w + "px";
+					await settle();
+					const el = iframe.contentDocument.querySelector(preview_selector);
+					if (!el) throw new Error(`"${preview_selector}" disappeared at ${w}px.`);
+					const built = await window.modernScreenshot.domToCanvas(el, { scale: 1, backgroundColor: bgOf(el), timeout: 15000 });
+					results.push({ width: w, blank: looksBlank(orig.canvas) ? "original" : looksBlank(built) ? "rebuilt" : null, ...diffCanvases(orig.canvas, built) });
+				}
+			} finally {
+				freeze.remove();
+				iframe.style.width = prev.width;
+				await settle();
+				iframe.contentWindow.scrollTo(0, prev.scroll);
+			}
+			const images = [];
+			for (const r of results) {
+				const img = await window.lccbChatAttach.prepareCanvas(r.composite, `compare-${r.width}.png`, true);
+				images.push({ media_type: img.media_type, data: img.data, width: img.width, height: img.height, label: `${r.width}px` });
+			}
+			return {
+				widths: results.map((r) => ({
+					width: r.width,
+					difference: `${r.score.toFixed(1)}%`,
+					original_height: r.heightA,
+					rebuilt_height: r.heightB,
+					verdict: r.blank ? `unreliable: the ${r.blank} capture is blank` : r.score <= 5 ? "very close" : r.score <= 12 ? "close: check the highlighted areas" : r.score <= 25 ? "noticeably different" : "very different",
+				})),
+				images,
+				note: "Each image is original | rebuilt | difference (red = pixels that differ after scaling both to the same width; height differences count too). Content you've deliberately changed (real text, photos) will differ: judge layout, spacing and type, not words.",
+			};
+		},
+
 		/** Rendered-preview inspection: markup, box, computed styles, children, matching CSS rules. */
 		async inspect({ selector, depth = 1, all = false }) {
 			const iframe = document.getElementById("previewiframe");
@@ -588,6 +646,149 @@
 		const img = await A.prepareCanvas(canvas, "responsive-check.png", true);
 		out.images.push({ media_type: img.media_type, data: img.data, width: img.width, height: img.height, label: runs.map((r) => r.width + "px").join(" · ") });
 		return out;
+	}
+
+	// ───────────────────────── HTML templates: render + compare ─────────────────────────
+
+	function bgOf(el) {
+		const win = el.ownerDocument.defaultView;
+		for (let n = el; n && n.nodeType === 1; n = n.parentElement) {
+			const bg = win.getComputedStyle(n).backgroundColor;
+			if (bg && bg !== "rgba(0, 0, 0, 0)" && bg !== "transparent") return bg;
+		}
+		return "#ffffff";
+	}
+
+	// Scroll-triggered animations would leave sections blank in a hidden frame: show everything in its final state.
+	const FREEZE_CSS = `*,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;transition:none!important}
+[data-aos],.aos-init,.wow,.appear-animation,[data-appear-animation],.animated,.reveal,.sc-reveal,[data-sal]{opacity:1!important;visibility:visible!important;transform:none!important}
+.owl-carousel:not(.owl-loaded),.slick-slider:not(.slick-initialized){display:block!important;opacity:1!important;visibility:visible!important}
+.owl-carousel:not(.owl-loaded)>:not(:first-child),.slick-slider:not(.slick-initialized)>:not(:first-child){display:none!important}
+.owl-carousel,[class*="owl-carousel-"][class*="-init"]{opacity:1!important}
+.owl-carousel .owl-stage>.owl-item:first-child:not(.cloned),.owl-carousel .owl-item.active,.carousel-item:first-child,.swiper-slide:first-child{display:block!important;visibility:visible!important;opacity:1!important}`;
+
+	/** True when a capture is (almost) one flat colour: the content was hidden, not rendered. */
+	function looksBlank(canvas) {
+		const W = 60, H = Math.max(1, Math.round((canvas.height * W) / Math.max(1, canvas.width)));
+		const c = document.createElement("canvas");
+		c.width = W;
+		c.height = H;
+		const ctx = c.getContext("2d");
+		ctx.drawImage(canvas, 0, 0, W, H);
+		const d = ctx.getImageData(0, 0, W, H).data;
+		let min = 255, max = 0;
+		for (let i = 0; i < d.length; i += 4) {
+			const v = (d[i] + d[i + 1] + d[i + 2]) / 3;
+			if (v < min) min = v;
+			if (v > max) max = v;
+		}
+		return max - min < 12;
+	}
+	const BLANK_NOTE = "This capture is blank: its content is probably hidden until a script or scroll animation runs. Don't trust it; check the other screenshot tools, or compare a different section.";
+
+	async function renderTemplateSection(url, selector, width) {
+		if (!window.modernScreenshot) throw new Error("Screenshot library missing.");
+		if (!url || new URL(url, location.href).origin !== location.origin) throw new Error("Template pages must be served from this site (uploads/lccb-template-src).");
+		const frame = document.createElement("iframe");
+		frame.setAttribute("aria-hidden", "true");
+		frame.style.cssText = `position:fixed;left:-${width + 4000}px;top:0;width:${width}px;height:900px;border:0;pointer-events:none;`;
+		document.body.appendChild(frame);
+		try {
+			await new Promise((resolve, reject) => {
+				const t = setTimeout(() => reject(new Error("The template page didn't load within 30s.")), 30000);
+				frame.onload = () => { clearTimeout(t); resolve(); };
+				frame.src = url;
+			});
+			const doc = frame.contentDocument;
+			if (!doc) throw new Error("Couldn't read the template page.");
+			const style = doc.createElement("style");
+			style.textContent = FREEZE_CSS;
+			doc.head.appendChild(style);
+			doc.querySelectorAll("img").forEach((img) => {
+				img.loading = "eager";
+				const lazy = img.getAttribute("data-src") || img.getAttribute("data-lazy-src");
+				if (lazy && !img.getAttribute("src")) img.src = lazy;
+			});
+			const el = selector ? doc.querySelector(selector) : doc.body;
+			if (!el) throw new Error(`Nothing on the template page matches "${selector}".`);
+			el.scrollIntoView({ block: "start" }); // wakes up IntersectionObserver-driven content near it
+			const imgs = [...el.querySelectorAll("img")].filter((i) => !i.complete);
+			await Promise.race([
+				Promise.all([doc.fonts ? doc.fonts.ready : null, ...imgs.map((i) => new Promise((r) => { i.onload = i.onerror = r; }))]),
+				new Promise((r) => setTimeout(r, 6000)),
+			]);
+			await new Promise((r) => setTimeout(r, 500));
+			const height = el.getBoundingClientRect().height;
+			const shot = await window.modernScreenshot.domToCanvas(el, { scale: 1, backgroundColor: bgOf(el), timeout: 20000 });
+			// The capture's canvas belongs to the frame's document and goes blank once the frame is removed: copy it out.
+			const canvas = document.createElement("canvas");
+			canvas.width = shot.width;
+			canvas.height = shot.height;
+			canvas.getContext("2d").drawImage(shot, 0, 0);
+			return { canvas, height };
+		} finally {
+			frame.remove();
+		}
+	}
+
+	/** Pixel difference after scaling both to the same width (missing height counts as different), plus a composite. */
+	function diffCanvases(a, b) {
+		const W = 300;
+		const ha = Math.max(1, Math.round((a.height * W) / a.width));
+		const hb = Math.max(1, Math.round((b.height * W) / b.width));
+		const H = Math.max(ha, hb);
+		const draw = (src, h) => {
+			const c = document.createElement("canvas");
+			c.width = W;
+			c.height = H;
+			const ctx = c.getContext("2d");
+			ctx.fillStyle = "#ffffff";
+			ctx.fillRect(0, 0, W, H);
+			ctx.drawImage(src, 0, 0, W, h);
+			return ctx.getImageData(0, 0, W, H);
+		};
+		const da = draw(a, ha).data, db = draw(b, hb).data;
+		const mask = new Uint8Array(W * H);
+		let diff = 0;
+		for (let i = 0, p = 0; i < da.length; i += 4, p++) {
+			const d = Math.max(Math.abs(da[i] - db[i]), Math.abs(da[i + 1] - db[i + 1]), Math.abs(da[i + 2] - db[i + 2]));
+			if (d > 48) { mask[p] = 1; diff++; }
+		}
+		// Composite: three columns at a readable size.
+		const COL = Math.min(520, Math.max(a.width, b.width)), GAP = 12, HEAD = 24;
+		const sa = COL / a.width, sb = COL / b.width;
+		const colH = Math.min(1500, Math.max(a.height * sa, b.height * sb));
+		const out = document.createElement("canvas");
+		out.width = COL * 3 + GAP * 2;
+		out.height = HEAD + colH;
+		const ctx = out.getContext("2d");
+		ctx.fillStyle = "#f1f1f1";
+		ctx.fillRect(0, 0, out.width, out.height);
+		ctx.drawImage(a, 0, HEAD, COL, a.height * sa);
+		ctx.drawImage(b, COL + GAP, HEAD, COL, b.height * sb);
+		// Difference: the rebuilt version faded, with differing pixels in red.
+		const heat = document.createElement("canvas");
+		heat.width = W;
+		heat.height = H;
+		const hctx = heat.getContext("2d");
+		const hd = hctx.createImageData(W, H);
+		for (let p = 0; p < mask.length; p++) {
+			const g = 255 - (255 - (db[p * 4] + db[p * 4 + 1] + db[p * 4 + 2]) / 3) * 0.25;
+			hd.data[p * 4] = mask[p] ? 225 : g;
+			hd.data[p * 4 + 1] = mask[p] ? 29 : g;
+			hd.data[p * 4 + 2] = mask[p] ? 72 : g;
+			hd.data[p * 4 + 3] = 255;
+		}
+		hctx.putImageData(hd, 0, 0);
+		ctx.drawImage(heat, 0, 0, W, H, (COL + GAP) * 2, HEAD, COL, (H * COL) / W);
+		ctx.font = "bold 13px -apple-system, Helvetica, sans-serif";
+		ctx.fillStyle = "#333";
+		const score = (diff / (W * H)) * 100;
+		ctx.fillText("Original", 2, 16);
+		ctx.fillText("Rebuilt", COL + GAP + 2, 16);
+		ctx.fillStyle = score <= 12 ? "#166534" : "#9f1239";
+		ctx.fillText(`Difference ${score.toFixed(1)}%`, (COL + GAP) * 2 + 2, 16);
+		return { score, composite: out, heightA: Math.round(a.height), heightB: Math.round(b.height) };
 	}
 
 	// ───────────────────────── Inspect helpers ─────────────────────────

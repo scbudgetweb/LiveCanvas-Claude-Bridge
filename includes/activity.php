@@ -17,6 +17,10 @@ const LCCB_TOOL_LABELS = array(
 	'lc_template_upsert' => 'Template change',
 	'lc_tokens_update'   => 'Design tokens',
 	'lc_media_import'    => 'Imported image',
+	'lc_html_template_assets' => 'Imported template assets',
+	'lc_section_create'  => 'Created section',
+	'lc_section_update'  => 'Updated section',
+	'lc_section_replace_inline' => 'Section → shortcode',
 	'lc_audit_restore'   => 'Undo',
 );
 
@@ -33,6 +37,8 @@ function lccb_activity_target( array $row ) {
 	switch ( $row['target_type'] ) {
 		case 'tokens':
 			return array( 'label' => 'Theme design tokens', 'links' => array( 'Customizer' => admin_url( 'customize.php' ) ) );
+		case 'template_assets':
+			return array( 'label' => 'Template assets in the child theme', 'links' => array() );
 		case 'media':
 			$att = get_post( $id );
 			return array( 'label' => $att ? 'Image: ' . $att->post_title : "Image #$id (deleted)", 'links' => $att ? array( 'Media' => get_edit_post_link( $id, 'raw' ) ) : array() );

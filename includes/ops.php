@@ -32,6 +32,16 @@ function lccb_ops_dispatch( $command, array $args ) {
 		'media_list'      => 'lccb_op_media_list',
 		'media_import'    => 'lccb_op_media_import',
 		'lint'            => 'lccb_op_lint',
+		'html_template_scan' => 'lccb_op_html_template_scan',
+		'html_template_read' => 'lccb_op_html_template_read',
+		'html_template_assets' => 'lccb_op_html_template_assets',
+		'html_template_locate' => 'lccb_op_html_template_locate',
+		'sections_list'   => 'lccb_op_sections_list',
+		'section_read'    => 'lccb_op_section_read',
+		'section_usage'   => 'lccb_op_section_usage',
+		'section_create'  => 'lccb_op_section_create',
+		'section_update'  => 'lccb_op_section_update',
+		'section_replace_inline' => 'lccb_op_section_replace_inline',
 	);
 	if ( ! isset( $ops[ $command ] ) ) {
 		throw new Exception( "Unknown command: $command" );

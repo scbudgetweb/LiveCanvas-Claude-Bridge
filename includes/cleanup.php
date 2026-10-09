@@ -169,11 +169,17 @@ function lccb_cleanup() {
 		}
 	}
 
+	// Template previews: links to the user's own template folders and extracted zips. Never follow the links.
+	if ( function_exists( 'lccb_tpl_remove_src' ) && ( file_exists( $up['basedir'] . '/lccb-template-src' ) || is_link( $up['basedir'] . '/lccb-template-src' ) ) ) {
+		$steps[] = array( 'ok' => lccb_tpl_remove_src(), 'text' => 'Deleted the HTML template previews (uploads/lccb-template-src; your template folders themselves are untouched)' );
+	}
+
 	// Database.
 	lccb_audit_uninstall();
 	delete_option( LCCB_BINDING_OPTION );
 	delete_option( LCCB_SETTINGS_OPTION );
 	global $wpdb;
+	$wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name = 'lccb_tpl_enqueue' OR option_name LIKE 'lccb\\_tpl\\_map\\_%'" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 	$wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE '\\_transient\\_lccb\\_%' OR option_name LIKE '\\_transient\\_timeout\\_lccb\\_%'" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 	$steps[] = array( 'ok' => true, 'text' => 'Removed plugin settings and the change history (audit log) from the database' );
 

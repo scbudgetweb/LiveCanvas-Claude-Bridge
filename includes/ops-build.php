@@ -462,6 +462,12 @@ function lccb_op_audit_restore( array $args ) {
 		$lines[] = $bundle && is_file( $bundle ) ? 'CSS bundle: restored from the backup taken before that change (no recompile needed)' : 'CSS bundle: no backup found; run lc_css_recompile afterwards';
 		return array( 'preview_id' => $id, 'applied' => false, 'summary' => "Undo #{$entry['id']}", 'changes' => $lines, 'content_diff' => '', 'warnings' => array(), 'next' => 'Call lc_apply_change with this preview_id to restore.' );
 	}
+	if ( 'template_assets' === $entry['target_type'] ) {
+		if ( 'lc_audit_restore' === $entry['tool'] ) {
+			throw new Exception( 'That entry already undid a template import; import the assets again with lc_html_template_assets instead.' );
+		}
+		return lccb_tpl_restore_preview( $entry );
+	}
 	if ( 'media' === $entry['target_type'] ) {
 		$att = get_post( (int) $entry['target_id'] );
 		if ( ! $att || 'attachment' !== $att->post_type ) {
@@ -510,6 +516,12 @@ function lccb_op_apply_change( array $args ) {
 			'undo'     => "lc_audit_restore {\"id\": $audit_id} previews undoing this.",
 			'next'     => $restored ? 'Done: tokens and the previous CSS bundle are back. Reload the builder preview (or take an lc_screenshot) to check.' : 'Tokens saved. Now run lc_css_recompile to rebuild the theme CSS, then lc_screenshot to check.',
 		);
+	}
+	if ( 'template_assets' === $plan['kind'] ) {
+		return lccb_tpl_apply_assets( $plan, $id, $restored_from );
+	}
+	if ( 'template_assets_undo' === $plan['kind'] ) {
+		return lccb_tpl_apply_restore( $plan, $id, $restored_from );
 	}
 	if ( 'delete_media' === $plan['kind'] ) {
 		$att = (int) $plan['target_id'];

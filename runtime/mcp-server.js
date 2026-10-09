@@ -78,7 +78,7 @@ function call(cmd, args = {}) {
 	if (!hub || hub.readyState !== 1) return Promise.reject(new Error(hubError || "Connecting to the LC Claude Bridge hub. Try again in a moment."));
 	const id = `m${++seq}`;
 	return new Promise((resolve, reject) => {
-		const limit = cmd === "screenshot" ? 65000 : cmd === "css_recompile" || cmd === "responsive_check" ? 125000 : TIMEOUT_MS;
+		const limit = cmd === "screenshot" || cmd === "template_shot" ? 65000 : ["css_recompile", "responsive_check", "compare"].includes(cmd) ? 125000 : TIMEOUT_MS;
 		const timer = setTimeout(() => { pending.delete(id); reject(new Error(`No answer to '${cmd}' within ${limit / 1000}s`)); }, limit);
 		pending.set(id, { resolve, reject, timer });
 		hub.send(JSON.stringify({ id, cmd, args }));
@@ -333,7 +333,7 @@ serverTool("lc_template_upsert", "Plan creating (no id: title + conditions requi
 	...contentEdit,
 }, "template_upsert", previewText);
 
-serverTool("lc_audit_list", "List recent site-level changes applied through lc_apply_change or lc_media_import (newest first), each with an audit id usable with lc_audit_restore.", { limit: z.number().int().optional(), target_type: z.enum(["page", "partial", "template", "tokens", "media"]).optional(), target_id: z.number().int().optional() }, "audit_list");
+serverTool("lc_audit_list", "List recent site-level changes applied through lc_apply_change or lc_media_import (newest first), each with an audit id usable with lc_audit_restore.", { limit: z.number().int().optional(), target_type: z.enum(["page", "partial", "template", "tokens", "media", "section", "template_assets"]).optional(), target_id: z.number().int().optional() }, "audit_list");
 serverTool("lc_audit_restore", "Plan undoing an audited change: puts the item back exactly as it was before that change (or moves it to the bin if that change created it)." + PREVIEW_NOTE, { id: z.number().int() }, "audit_restore", previewText);
 
 server.registerTool("lc_apply_change", {
@@ -346,6 +346,95 @@ server.registerTool("lc_apply_change", {
 		try { await call("refresh_css", {}); r.preview_css_refreshed = true; } catch (_) { r.preview_css_refreshed = false; }
 	}
 	return json(r);
+});
+
+// ───────────────────────── Start from an HTML template ─────────────────────────
+
+const tplPath = z.string().describe("The template's folder or .zip on this Mac (e.g. ~/Downloads/porto.zip or ~/projects/porto/HTML). Never modified.");
+
+serverTool("lc_html_template_scan", "Scan a bought/downloaded HTML template (folder or .zip): its CSS framework (Bootstrap and version, Tailwind, Bulma, Foundation, UIkit or hand-written, with evidence) and the recommended strategy, pages (grouped when there are hundreds) with section outlines, shared header/footer, CSS/JS and recognised libraries, fonts, images, likely design tokens to map onto Picostrap, and warnings (jQuery plugins, Bootstrap 4). Read-only.", {
+	path: tplPath,
+	filter: z.string().optional().describe("Only detail pages whose path contains this (e.g. 'demo-beauty-salon'); use the groups from a first scan"),
+	limit: z.number().int().optional().describe("How many pages to detail (default 40)"),
+}, "html_template_scan");
+
+serverTool("lc_html_template_read", "Read a template page. Without `section`: its header, footer and numbered content sections (with selectors). With `section` (index, 'header' or 'footer'): that part as LiveCanvas-ready HTML: scripts and handlers stripped, lazy images un-lazied, links between template pages set to #, images pointing at the media library once imported (else at a local preview copy), Bootstrap 4 → 5 renamed. strategy 'convert' maps Tailwind/Bulma/Foundation classes to Bootstrap 5 where it's mechanical and lists what's left for you; 'scoped' adds the .tpl-<slug> wrapper class. Read-only.", {
+	path: tplPath,
+	page: z.string().optional().describe("Page path relative to the template's HTML folder (default index.html)"),
+	section: z.union([z.number().int(), z.enum(["header", "footer"])]).optional(),
+	strategy: z.enum(["auto", "bootstrap", "convert", "scoped"]).optional().describe("auto (default): convert non-Bootstrap templates, keep Bootstrap ones as they are"),
+}, "html_template_read");
+
+serverTool("lc_html_template_assets", "Plan importing what the given template pages need, so the site keeps working after this plugin is removed: the template's own CSS/JS (and the fonts/images its CSS references) copied into the child theme's template-assets/<slug>/, a managed enqueue block in the child theme's functions.php (CDN libraries enqueued by URL; Bootstrap and jQuery come from the theme/WordPress), and the pages' images into the media library (de-duplicated). scope: true prefixes the template's own CSS with .tpl-<slug> so it can't clash with Bootstrap." + PREVIEW_NOTE + " Undo removes exactly what was added.", {
+	path: tplPath,
+	pages: z.array(z.string()).describe("Template pages you're building from, e.g. [\"index.html\", \"about.html\"]"),
+	include: z.array(z.enum(["css", "js", "fonts", "images"])).optional().describe("Default all four"),
+	scope: z.boolean().optional(),
+	exclude: z.array(z.string()).optional().describe("Skip files whose path contains any of these (e.g. 'revolution', 'demo')"),
+}, "html_template_assets", previewText);
+
+async function templateSelector(path, page, section) {
+	if (section === undefined || section === null) return null;
+	const outline = await wpRun("html_template_read", { path, page });
+	const hit = section === "header" ? outline.header : section === "footer" ? outline.footer : (outline.sections || [])[section];
+	if (!hit) throw new Error(`No section ${section} on ${outline.page} (it has ${(outline.sections || []).length}, numbered from 0).`);
+	return hit.selector;
+}
+
+server.registerTool("lc_html_template_preview", {
+	description: "See the ORIGINAL template: renders a template page in a hidden frame of the builder tab (needs the builder open) at a given width and returns a screenshot of one section (or the page). Use it before rebuilding a section, and lc_compare after.",
+	inputSchema: {
+		path: tplPath,
+		page: z.string().optional(),
+		section: z.union([z.number().int(), z.enum(["header", "footer"])]).optional(),
+		width: z.number().int().min(320).max(2560).optional().describe("Default 1200; try 390 for mobile"),
+	},
+}, async ({ path, page, section, width }) => {
+	const loc = await wpRun("html_template_locate", { path, page });
+	const selector = await templateSelector(path, page, section);
+	return imageResult(await call("template_shot", { url: loc.url, selector, width: width || 1200 }));
+});
+
+server.registerTool("lc_compare", {
+	description: "Check a rebuilt section against the original template section at the same width(s) (needs the builder open): returns, per width, one image (original | rebuilt | difference in red) and a pixel-difference score. Aim for 'close' (≤12%) at 1200 and 390 unless content was deliberately changed; iterate with lc_edit_html / lc_edit_css and compare again.",
+	inputSchema: {
+		path: tplPath,
+		page: z.string().optional(),
+		section: z.union([z.number().int(), z.enum(["header", "footer"])]).describe("The template section (as numbered by lc_html_template_read)"),
+		preview_selector: z.string().describe("The rebuilt section in the rendered builder preview, e.g. '#about' or 'main#lc-main > section:nth-of-type(3)'"),
+		widths: z.array(z.number().int().min(320).max(2560)).max(3).optional().describe("Default [1200, 390]"),
+	},
+}, async ({ path, page, section, preview_selector, widths }) => {
+	const loc = await wpRun("html_template_locate", { path, page });
+	const template_selector = await templateSelector(path, page, section);
+	const r = await call("compare", { url: loc.url, template_selector, preview_selector, widths });
+	const content = (r.images || []).map((img) => ({ type: "image", data: img.data, mimeType: img.media_type }));
+	content.push({ type: "text", text: JSON.stringify({ widths: r.widths, note: r.note }, null, 2) });
+	return { content };
+});
+
+// ───────────────────────── Section library (LiveCanvas lc_section) ─────────────────────────
+
+const sectionRef = { id: z.number().int().optional(), slug: z.string().optional() };
+serverTool("lc_sections_list", "List the reusable sections in LiveCanvas's section library (lc_section posts), with how many pages embed each and the HTML to embed one.", {}, "sections_list");
+serverTool("lc_section_read", "Read a library section's HTML.", sectionRef, "section_read");
+serverTool("lc_section_usage", "Where a library section is used: pages/partials that embed it by shortcode, and pages that still have an inline copy of its HTML (exact, or near-identical).", sectionRef, "section_usage");
+serverTool("lc_section_create", "Plan adding a reusable section to the library (published, so the shortcode renders). Take the HTML from lc_read_html (a section of the open page) or lc_html_template_read." + PREVIEW_NOTE, {
+	title: z.string(),
+	html: z.string().describe("The section's HTML (one top-level element, e.g. <section>…</section>)"),
+	slug: z.string().optional(),
+}, "section_create", previewText);
+serverTool("lc_section_update", "Plan a change to a library section: every page that embeds it changes too." + PREVIEW_NOTE, { ...sectionRef, title: z.string().optional(), ...contentEdit }, "section_update", previewText);
+server.registerTool("lc_section_replace_inline", {
+	description: "Plan swapping exact inline copies of a library section on pages/partials for its shortcode embed (LiveCanvas's live-shortcode wrapper), so it's edited in one place. Returns one preview per page; apply each with lc_apply_change. Pages open in the builder are skipped (do those with lc_edit_html).",
+	inputSchema: { section: z.union([z.number().int(), z.string()]).describe("Section id or slug"), pages: z.array(z.number().int()).optional().describe("Only these page/partial ids") },
+}, async (args) => {
+	const r = await wpRun("section_replace_inline", args);
+	const parts = [];
+	for (const p of r.previews || []) parts.push(`PREVIEW (nothing written yet): ${p.summary}`, "```diff", p.content_diff, "```", `preview_id: ${p.preview_id}`, "");
+	for (const s of r.skipped || []) parts.push("⚠ " + s);
+	parts.push(r.next);
+	return { content: [{ type: "text", text: parts.join("\n") }] };
 });
 
 // ───────────────────────── Design tokens (Picostrap) + CSS recompile ─────────────────────────
