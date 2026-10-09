@@ -78,7 +78,7 @@ function call(cmd, args = {}) {
 	if (!hub || hub.readyState !== 1) return Promise.reject(new Error(hubError || "Connecting to the LC Claude Bridge hub. Try again in a moment."));
 	const id = `m${++seq}`;
 	return new Promise((resolve, reject) => {
-		const limit = cmd === "screenshot" ? 65000 : TIMEOUT_MS;
+		const limit = cmd === "screenshot" ? 65000 : cmd === "css_recompile" ? 125000 : TIMEOUT_MS;
 		const timer = setTimeout(() => { pending.delete(id); reject(new Error(`No answer to '${cmd}' within ${limit / 1000}s`)); }, limit);
 		pending.set(id, { resolve, reject, timer });
 		hub.send(JSON.stringify({ id, cmd, args }));
@@ -293,10 +293,45 @@ serverTool("lc_template_upsert", "Plan creating (no id: title + conditions requi
 	...contentEdit,
 }, "template_upsert", previewText);
 
-serverTool("lc_audit_list", "List recent site-level changes applied through lc_apply_change (newest first), each with an audit id usable with lc_audit_restore.", { limit: z.number().int().optional(), target_type: z.enum(["page", "partial", "template"]).optional(), target_id: z.number().int().optional() }, "audit_list");
+serverTool("lc_audit_list", "List recent site-level changes applied through lc_apply_change or lc_media_import (newest first), each with an audit id usable with lc_audit_restore.", { limit: z.number().int().optional(), target_type: z.enum(["page", "partial", "template", "tokens", "media"]).optional(), target_id: z.number().int().optional() }, "audit_list");
 serverTool("lc_audit_restore", "Plan undoing an audited change: puts the item back exactly as it was before that change (or moves it to the bin if that change created it)." + PREVIEW_NOTE, { id: z.number().int() }, "audit_restore", previewText);
 
 serverTool("lc_apply_change", "Apply a change previewed by lc_page_create / lc_page_update / lc_partial_update / lc_template_upsert / lc_audit_restore. Refuses if the target changed since the preview. The previous version is kept in the audit log (undo with lc_audit_restore).", { preview_id: z.string() }, "apply_change");
+
+// ───────────────────────── Design tokens (Picostrap) + CSS recompile ─────────────────────────
+
+serverTool("lc_tokens_get", "Read the theme's design tokens: Picostrap SCSS variables that are set (colours, fonts, sizes…), the web-font <link> code, and the compiled CSS bundle's size/version.", {}, "tokens_get");
+serverTool("lc_tokens_update", "Plan design-token changes (Picostrap SCSS variables, e.g. {\"primary\": \"#1f2937\", \"headings-font-family\": \"'Playfair Display', serif\"}; unset to go back to the default; fonts_header_code for the Google Fonts <link> tags). After lc_apply_change, run lc_css_recompile." + PREVIEW_NOTE, {
+	set: z.record(z.union([z.string(), z.number(), z.boolean()])).optional(),
+	unset: z.array(z.string()).optional(),
+	fonts_header_code: z.string().optional(),
+}, "tokens_update", previewText);
+
+server.registerTool("lc_css_recompile", {
+	description: "Rebuild the theme's CSS bundle from the current design tokens and SCSS files, using Picostrap's own compiler in a hidden frame of the builder tab (needs the builder open; takes ~10-60s). Then refreshes the preview's CSS. Use after applying token changes or editing the child theme's SCSS.",
+	inputSchema: {},
+}, async () => {
+	const before = await wpRun("tokens_get");
+	const origin = ((loadConfig().sites || {})[SITE] || {}).origin;
+	if (!origin) throw new Error("Site origin unknown; reconnect the site.");
+	const r = await call("css_recompile", { url: origin + "/?compile_sass=1&sass_nocache=1" });
+	const after = await wpRun("tokens_get");
+	const b = before.css_bundle, a = after.css_bundle;
+	const changed = a.version !== b.version || a.modified !== b.modified || a.bytes !== b.bytes;
+	if (!changed) throw new Error(`The CSS bundle wasn't rebuilt${r.feedback ? ": " + r.feedback : ""}. Check the SCSS for errors (Picostrap's compiler output above) and try again.`);
+	return json({ compiled: true, seconds: r.seconds, bytes_before: b.bytes, bytes_after: a.bytes, version: a.version, preview_refreshed: r.preview_refreshed, next: "Take an lc_screenshot to check the result." });
+});
+
+// ───────────────────────── Media library ─────────────────────────
+
+serverTool("lc_media_list", "List recent images in the media library (id, title, alt, size, URL), optionally searched.", { search: z.string().optional(), limit: z.number().int().optional() }, "media_list");
+serverTool("lc_media_import", "Add an image to the WordPress media library from a URL or from a file path inside the site (images the user drops into CC Chat are saved to an inbox path given in their message). Returns the attachment id, URLs per size and ready-to-use <img> HTML. Audited: lc_audit_restore deletes it again.", {
+	url: z.string().optional(),
+	path: z.string().optional(),
+	title: z.string().optional(),
+	alt: z.string().optional().describe("Alt text (describe the image for screen readers)"),
+	filename: z.string().optional(),
+}, "media_import");
 
 server.registerTool("lc_open_page", {
 	description: "Open a page, partial or dynamic template in the LiveCanvas builder (the user's builder tab navigates there). Refuses if the builder has unsaved changes unless discard is true; ask the user before discarding.",

@@ -18,7 +18,7 @@
  *            {t:"error", message}
  */
 import { spawn } from "node:child_process";
-import { readdirSync, statSync, openSync, readSync, closeSync, readFileSync, existsSync } from "node:fs";
+import { readdirSync, statSync, openSync, readSync, closeSync, readFileSync, existsSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -243,19 +243,53 @@ export function createChat({ loadConfig, log, notifyEditor = () => {} }) {
 		});
 	}
 
+	// Images dropped into CC Chat are also saved where lc_media_import can reach them.
+	const INBOX_TTL_MS = 24 * 60 * 60 * 1000;
+	const EXT = { "image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp" };
+
+	function saveToInbox(site, turnId, images) {
+		const root = (loadConfig().sites[site] || {}).root;
+		const uploads = root && join(root, "wp-content", "uploads");
+		if (!uploads || !existsSync(uploads)) return [];
+		const inbox = join(uploads, "lccb-inbox");
+		try {
+			mkdirSync(inbox, { recursive: true });
+			if (!existsSync(join(inbox, ".htaccess"))) writeFileSync(join(inbox, ".htaccess"), "Require all denied\n");
+			if (!existsSync(join(inbox, "index.php"))) writeFileSync(join(inbox, "index.php"), "<?php // Silence.\n");
+			for (const d of readdirSync(inbox)) { // housekeeping: drop day-old turns
+				const full = join(inbox, d);
+				try { if (statSync(full).isDirectory() && Date.now() - statSync(full).mtimeMs > INBOX_TTL_MS) rmSync(full, { recursive: true, force: true }); } catch (_) {}
+			}
+			const dir = join(inbox, turnId);
+			mkdirSync(dir, { recursive: true });
+			return images.map((img, i) => {
+				const file = join(dir, `image-${i + 1}.${EXT[img.source.media_type] || "png"}`);
+				writeFileSync(file, Buffer.from(img.source.data, "base64"));
+				return file;
+			});
+		} catch (err) {
+			log(`[${site}] couldn't save chat images to the inbox: ${err.message}`);
+			return [];
+		}
+	}
+
 	function onSend(s, msg) {
 		const text = String(msg.text || "").trim();
 		const images = validImages(msg.images);
 		if (!text && !images.length) return;
 		if (!s.proc) start(s);
+		const turnId = `t${Date.now().toString(36)}${(++seq).toString(36)}`;
 		const content = [...images, ...(text ? [{ type: "text", text }] : [])];
+		const saved = images.length ? saveToInbox(s.site, turnId, images) : [];
+		if (saved.length) {
+			content.push({ type: "text", text: `[Note from the LiveCanvas bridge: the image${saved.length > 1 ? "s" : ""} above ${saved.length > 1 ? "are" : "is"} also saved at ${saved.join(", ")}. To use ${saved.length > 1 ? "them" : "it"} on the site, add ${saved.length > 1 ? "them" : "it"} to the media library with lc_media_import {path}.]` });
+		}
 		if (s.pendingNote) {
 			// The user rolled the builder back since Claude last looked: say so, or it assumes its edits are still there.
 			content.unshift({ type: "text", text: s.pendingNote });
 			s.pendingNote = "";
 		}
 		write(s, { type: "user", message: { role: "user", content } });
-		const turnId = `t${Date.now().toString(36)}${(++seq).toString(36)}`;
 		s.awaitingUuid.push(turnId);
 		notifyEditor(s.site, { event: "turn", turnId, label: text.slice(0, 120) || "(image)", source: "chat" });
 		// Claude doesn't echo user turns; record one for the transcript (images as small placeholders).

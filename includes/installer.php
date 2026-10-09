@@ -32,6 +32,10 @@ define( 'LCCB_READONLY_TOOLS', array(
 	'mcp__livecanvas__lc_template_upsert',
 	'mcp__livecanvas__lc_audit_list',
 	'mcp__livecanvas__lc_audit_restore',
+	'mcp__livecanvas__lc_tokens_get',
+	'mcp__livecanvas__lc_tokens_update',
+	'mcp__livecanvas__lc_css_recompile',
+	'mcp__livecanvas__lc_media_list',
 ) );
 define( 'LCCB_HUB_PORT', defined( 'LC_CLAUDE_BRIDGE_PORT' ) ? (int) LC_CLAUDE_BRIDGE_PORT : 8770 );
 

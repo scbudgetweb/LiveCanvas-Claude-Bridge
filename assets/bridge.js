@@ -269,6 +269,55 @@
 			return { opening: title || url, url, discarded_unsaved_changes: !!dirty };
 		},
 
+		/**
+		 * Rebuild the theme CSS with Picostrap's own in-browser compiler: load its compile URL in a hidden same-origin
+		 * frame (admin cookies included), wait for it to save + redirect, surface compiler errors, then refresh the
+		 * preview's stylesheet links so the new CSS shows without reloading the builder.
+		 */
+		async css_recompile({ url }) {
+			if (!url || new URL(url).origin !== location.origin) throw new Error("Can only compile this site's CSS.");
+			const started = Date.now();
+			const frame = document.createElement("iframe");
+			frame.setAttribute("aria-hidden", "true");
+			frame.style.cssText = "position:fixed;left:-10000px;top:0;width:1280px;height:900px;border:0;visibility:hidden;";
+			document.body.appendChild(frame);
+			let feedback = "";
+			try {
+				await new Promise((resolve, reject) => {
+					const deadline = setTimeout(() => reject(new Error("Picostrap's compiler didn't finish within 110s.")), 110000);
+					const tick = setInterval(() => {
+						let w;
+						try { w = frame.contentWindow; } catch (_) { return; }
+						if (!w || !w.document) return;
+						const fb = w.document.getElementById("picosass-output-feedback");
+						if (fb && fb.textContent.trim()) feedback = fb.textContent.trim().replace(/\s+/g, " ").slice(0, 600);
+						if (/error/i.test(feedback)) { clearInterval(tick); clearTimeout(deadline); reject(new Error("SCSS compile error: " + feedback)); return; }
+						// Picostrap saves the bundle, then redirects to the same URL without query args: that's "done".
+						let search = "";
+						try { search = w.location.search; } catch (_) {}
+						if (w.document.readyState === "complete" && w.location.href !== "about:blank" && !/compile_sass/.test(search)) {
+							clearInterval(tick); clearTimeout(deadline); resolve();
+						}
+					}, 500);
+					frame.src = url;
+				});
+			} finally {
+				frame.remove();
+			}
+			// Point the preview's theme stylesheet(s) at the fresh file.
+			let refreshed = 0;
+			const pdoc = document.getElementById("previewiframe") && document.getElementById("previewiframe").contentDocument;
+			if (pdoc) {
+				pdoc.querySelectorAll('link[rel="stylesheet"][href*="css-output/"]').forEach((link) => {
+					const u = new URL(link.href);
+					u.searchParams.set("lccb", Date.now());
+					link.href = u.toString();
+					refreshed++;
+				});
+			}
+			return { seconds: Math.round((Date.now() - started) / 1000), feedback, preview_refreshed: refreshed > 0 };
+		},
+
 		async save() {
 			window.jQuery("#main-save").trigger("click");
 			return { triggered: true, note: "Save triggered (HTML, Global CSS and Global JS)." };

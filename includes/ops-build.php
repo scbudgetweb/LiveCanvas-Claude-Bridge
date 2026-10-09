@@ -445,6 +445,32 @@ function lccb_op_audit_restore( array $args ) {
 	if ( ! $entry ) {
 		throw new Exception( 'No audit entry with that id.' );
 	}
+	if ( 'tokens' === $entry['target_type'] ) {
+		$want    = $entry['before']['mods'];
+		$current = lccb_mods_snapshot( array_keys( $want ) );
+		$bundle  = isset( $entry['after']['bundle_backup'] ) ? $entry['after']['bundle_backup'] : null;
+		$id      = 'pv_' . wp_generate_password( 10, false, false );
+		set_transient( 'lccb_preview_' . $id, array(
+			'tool' => 'lc_audit_restore', 'kind' => 'tokens', 'target_type' => 'tokens', 'target_id' => 0,
+			'summary' => "Undo #{$entry['id']}: {$entry['summary']}", 'before' => array( 'mods' => $current ), 'after' => array( 'mods' => $want ),
+			'fingerprint' => md5( wp_json_encode( $current ) ), 'restore_bundle' => $bundle,
+		), LCCB_PREVIEW_TTL );
+		$lines = array();
+		foreach ( $want as $k => $v ) {
+			$lines[] = sprintf( '%s: %s → %s', 'picostrap_fonts_header_code' === $k ? 'fonts_header_code' : '$' . substr( $k, 8 ), null === $current[ $k ] ? '(default)' : wp_json_encode( $current[ $k ] ), null === $v ? '(default)' : wp_json_encode( $v ) );
+		}
+		$lines[] = $bundle && is_file( $bundle ) ? 'CSS bundle: restored from the backup taken before that change (no recompile needed)' : 'CSS bundle: no backup found; run lc_css_recompile afterwards';
+		return array( 'preview_id' => $id, 'applied' => false, 'summary' => "Undo #{$entry['id']}", 'changes' => $lines, 'content_diff' => '', 'warnings' => array(), 'next' => 'Call lc_apply_change with this preview_id to restore.' );
+	}
+	if ( 'media' === $entry['target_type'] ) {
+		$att = get_post( (int) $entry['target_id'] );
+		if ( ! $att || 'attachment' !== $att->post_type ) {
+			throw new Exception( 'That image is already gone from the media library.' );
+		}
+		$id = 'pv_' . wp_generate_password( 10, false, false );
+		set_transient( 'lccb_preview_' . $id, array( 'tool' => 'lc_audit_restore', 'kind' => 'delete_media', 'target_type' => 'media', 'target_id' => $att->ID, 'summary' => "Undo #{$entry['id']}: delete imported image \"{$att->post_title}\"", 'before' => null, 'after' => null, 'fingerprint' => 'media' ), LCCB_PREVIEW_TTL );
+		return array( 'preview_id' => $id, 'applied' => false, 'summary' => "Undo #{$entry['id']}", 'changes' => array( "Delete image #{$att->ID} \"{$att->post_title}\" and its files from the media library (pages still using it will show a broken image)" ), 'content_diff' => '', 'warnings' => array(), 'next' => 'Call lc_apply_change with this preview_id to delete it.' );
+	}
 	$target_id = (int) $entry['target_id'];
 	$current   = $target_id ? lccb_snapshot_post( $target_id ) : null;
 	if ( ! $current ) {
@@ -466,6 +492,30 @@ function lccb_op_apply_change( array $args ) {
 	if ( ! $plan ) {
 		throw new Exception( 'That preview has expired or was already applied. Preview the change again.' );
 	}
+	$restored_from = 'lc_audit_restore' === $plan['tool'] && preg_match( '/^Undo #(\d+)/', $plan['summary'], $um ) ? (int) $um[1] : null;
+	if ( 'tokens' === $plan['kind'] ) {
+		$extra = lccb_apply_tokens_plan( $plan, isset( $plan['restore_bundle'] ) ? $plan['restore_bundle'] : null );
+		delete_transient( 'lccb_preview_' . $id );
+		$audit_id = lccb_audit_record( $plan['tool'], 'tokens', 0, $plan['summary'], $plan['before'], $plan['after'] + $extra, 'claude', $restored_from );
+		$restored = ! empty( $plan['restore_bundle'] );
+		return array(
+			'applied'  => true,
+			'summary'  => $plan['summary'],
+			'audit_id' => $audit_id,
+			'undo'     => "lc_audit_restore {\"id\": $audit_id} previews undoing this.",
+			'next'     => $restored ? 'Done: tokens and the previous CSS bundle are back. Reload the builder preview (or take an lc_screenshot) to check.' : 'Tokens saved. Now run lc_css_recompile to rebuild the theme CSS, then lc_screenshot to check.',
+		);
+	}
+	if ( 'delete_media' === $plan['kind'] ) {
+		$att = (int) $plan['target_id'];
+		if ( ! wp_delete_attachment( $att, true ) ) {
+			throw new Exception( 'Could not delete that image.' );
+		}
+		delete_transient( 'lccb_preview_' . $id );
+		$audit_id = lccb_audit_record( 'lc_audit_restore', 'media', $att, $plan['summary'], array( 'attachment' => $att ), null, 'claude', $restored_from );
+		return array( 'applied' => true, 'summary' => $plan['summary'], 'audit_id' => $audit_id );
+	}
+
 	$target_id = (int) $plan['target_id'];
 	$current   = $target_id ? lccb_snapshot_post( $target_id ) : null;
 	if ( lccb_fingerprint( $current ) !== $plan['fingerprint'] ) {
@@ -496,9 +546,8 @@ function lccb_op_apply_change( array $args ) {
 	}
 	delete_transient( 'lccb_preview_' . $id );
 
-	$after_snap    = lccb_snapshot_post( $target_id );
-	$restored_from = 'lc_audit_restore' === $plan['tool'] && preg_match( '/^Undo #(\d+)/', $plan['summary'], $m ) ? (int) $m[1] : null;
-	$audit_id      = lccb_audit_record( $plan['tool'], $plan['target_type'], $target_id, $plan['summary'], $plan['before'], $after_snap, 'claude', $restored_from );
+	$after_snap = lccb_snapshot_post( $target_id );
+	$audit_id   = lccb_audit_record( $plan['tool'], $plan['target_type'], $target_id, $plan['summary'], $plan['before'], $after_snap, 'claude', $restored_from );
 
 	$out = array(
 		'applied'  => true,

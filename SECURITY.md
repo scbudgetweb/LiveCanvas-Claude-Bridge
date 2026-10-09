@@ -26,6 +26,10 @@ LiveCanvas Claude Bridge lets a page in your browser (the LiveCanvas editor) dri
   - **The runner:** these tools run through `runtime/wp-run.php`, a command-line-only script that refuses any web request. It acts as the administrator who connected the site, and refuses unless the site is registered, local and bound to this Mac.
   - **Previews and approval:** previews write nothing. `lc_apply_change` is the only tool that writes, and it isn't pre-approved, so Claude Code asks you first.
   - **Audit log:** every apply stores a before-copy in a `{prefix}lccb_audit` table, which cleanup mode removes.
+- **Media imports are guarded.**
+  - Imported URLs must be http(s) on the public internet, or this site; loopback and private addresses are refused.
+  - Paths must be inside the site, and files must really be images.
+  - Images dropped into CC Chat are saved to `uploads/lccb-inbox/` (web access denied, cleared after 24 hours). CSS bundle backups go to `uploads/lccb-backups/` (web access denied).
 - **Claude's own permissions still apply.** In CC Chat, every edit or command that Claude Code would normally ask about needs your approval, unless you pick a more permissive mode yourself.
 
 ## Out of scope

@@ -27,6 +27,10 @@ function lccb_ops_dispatch( $command, array $args ) {
 		'audit_restore'   => 'lccb_op_audit_restore',
 		'apply_change'    => 'lccb_op_apply_change',
 		'editor_url'      => 'lccb_op_editor_url',
+		'tokens_get'      => 'lccb_op_tokens_get',
+		'tokens_update'   => 'lccb_op_tokens_update',
+		'media_list'      => 'lccb_op_media_list',
+		'media_import'    => 'lccb_op_media_import',
 	);
 	if ( ! isset( $ops[ $command ] ) ) {
 		throw new Exception( "Unknown command: $command" );

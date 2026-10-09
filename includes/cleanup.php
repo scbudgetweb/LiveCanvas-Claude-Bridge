@@ -156,6 +156,19 @@ function lccb_cleanup() {
 		$steps[] = array( 'ok' => true, 'text' => 'deleted' === $brief ? 'Deleted CLAUDE.md (it only contained the site brief)' : 'Removed the site brief from CLAUDE.md (your own notes kept)' );
 	}
 
+	// Backups of the CSS bundle and the CC Chat image inbox (both inside uploads).
+	$up = wp_upload_dir();
+	foreach ( array( 'lccb-backups' => 'CSS bundle backups', 'lccb-inbox' => 'CC Chat image inbox' ) as $folder => $label ) {
+		$dir = $up['basedir'] . '/' . $folder;
+		if ( is_dir( $dir ) ) {
+			require_once ABSPATH . 'wp-admin/includes/file.php';
+			WP_Filesystem();
+			global $wp_filesystem;
+			$ok      = $wp_filesystem && $wp_filesystem->delete( $dir, true );
+			$steps[] = array( 'ok' => (bool) $ok, 'text' => "Deleted the $label (uploads/$folder)" );
+		}
+	}
+
 	// Database.
 	lccb_audit_uninstall();
 	delete_option( LCCB_BINDING_OPTION );

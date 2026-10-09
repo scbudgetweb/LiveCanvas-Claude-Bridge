@@ -172,6 +172,11 @@
 		lc_audit_restore: ["Preview undo", id, "preview"],
 		lc_apply_change: ["Apply change", (i) => i.preview_id, "apply"],
 		lc_open_page: ["Open in builder", (i) => id(i) + (i.discard ? " · discard unsaved" : "")],
+		lc_tokens_get: ["Read design tokens", () => ""],
+		lc_tokens_update: ["Preview design tokens", (i) => Object.keys(i.set || {}).concat((i.unset || []).map((u) => "−" + u)).join(", "), "preview"],
+		lc_css_recompile: ["Recompile theme CSS", () => "Picostrap"],
+		lc_media_list: ["List images", (i) => i.search || ""],
+		lc_media_import: ["Import image", (i) => i.url || (i.path || "").split("/").pop(), "apply"],
 	};
 
 	/**

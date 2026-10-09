@@ -38,6 +38,13 @@ Unofficial WordPress plugin that connects the [LiveCanvas](https://livecanvas.co
   - LiveCanvas dynamic templates and their display conditions
 
   Every change is a **preview first**: you see a diff and nothing is written. Only `lc_apply_change` writes, and Claude Code asks you to approve it. It refuses if the target changed since the preview, or if the page is open in a builder.
+- **Design tokens (Picostrap):**
+  - Claude reads and changes the theme's SCSS variables (colours, fonts, sizes, `$enable-*` switches) and web-font links, with a preview first.
+  - `lc_css_recompile` rebuilds the theme CSS with Picostrap's own compiler, from inside your builder tab, and refreshes the preview.
+  - The previous CSS bundle is backed up when a change is applied, so undo is instant and exact.
+- **Media library:**
+  - `lc_media_import` adds images from a URL, or from images you drop into CC Chat (they're saved to a protected inbox Claude can reach), with alt text. It returns ready-to-use responsive `<img>` HTML.
+  - Imports ask for your approval and can be undone.
 - **Change history with undo:** every applied site-level change is stored in an audit log with its before-copy. `lc_audit_restore` puts any of them back exactly, and restores are themselves undoable.
 - **Rollback:** before Claude's first change in each reply, the plugin saves a checkpoint of the page HTML, Global CSS and Global JS. **"↺ Restore to before this"** on your messages puts everything back. It also rewinds files Claude edited, such as theme files, using Claude Code's own file checkpoints.
 - **Works across sites:** one shared background service on your Mac serves every connected site. Each site only ever reaches its own builder.
@@ -112,6 +119,7 @@ Site-level tools act through a PHP command-line runner as the administrator who 
 
 - **CC Chat and History** rely on Claude Code's streaming format and session files, which aren't formally documented. They were verified with Claude Code 2.1.286, and a future update may break them. **CC Terminal** keeps working regardless.
 - **The bridge** uses LiveCanvas's internal editor functions, so a LiveCanvas update could break it too.
+- **Design tokens** need a Picostrap theme. The recompile needs the builder open and an internet connection, because Picostrap's compiler runs in the browser.
 - **Rollback:**
   - It changes the builder only. If you'd already saved, save again to roll the live page back.
   - File rewind covers edits Claude made with its Edit and Write tools, for messages sent in CC Chat. Changes made by shell commands, such as database edits with `wp`, aren't tracked.
