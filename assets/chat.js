@@ -530,13 +530,16 @@
 					h("span", { class: "lccb-chat-history-title", text: `#${it.id} ${it.action}: ${it.summary}` }),
 					h("span", { class: "lccb-chat-history-meta", text: [it.ago, it.target, it.undone ? "undone" : ""].filter(Boolean).join(" · ") })),
 				h("a", { class: "lccb-chat-btn", href: it.detail_url, target: "_blank", rel: "noopener", title: "Before/after in Tools › Claude Code › Activity" }, "Details"),
-				it.undone ? null : h("button", { type: "button", class: "lccb-chat-btn", onclick: () => undoActivity(it) }, "Undo")));
+				it.undone ? null : h("button", { type: "button", class: "lccb-chat-btn", onclick: () => undoActivity(it) }, it.is_undo ? "Redo" : "Undo")));
 		});
 		els.activityPop.append(list, h("div", { class: "lccb-chat-limit-note", text: "These are live on the site (not builder edits). Undo puts an item back exactly as it was before that change." }));
 	}
 
 	async function undoActivity(it) {
-		if (!confirm(`Undo #${it.id}: ${it.summary}?\n\nThe item goes back exactly as it was before this change. This is live on the site straight away, and can itself be undone from Activity.`)) return;
+		const question = it.is_undo
+			? `Redo: reverse #${it.id} (${it.summary})?\n\nThis puts the undone change back. It's live on the site straight away.`
+			: `Undo #${it.id}: ${it.summary}?\n\nThe item goes back exactly as it was before this change. This is live on the site straight away, and can itself be undone from Activity.`;
+		if (!confirm(question)) return;
 		try {
 			const res = await fetch(restBase() + `activity/${it.id}/undo`, { method: "POST", credentials: "same-origin", headers: restHeaders(), body: "{}" });
 			const body = await res.json();

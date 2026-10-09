@@ -66,6 +66,7 @@ function lccb_activity_item( array $row, array $undone ) {
 		'target'        => $t['label'],
 		'links'         => $t['links'],
 		'restored_from' => $row['restored_from'],
+		'is_undo'       => 'lc_audit_restore' === $row['tool'], // undoing an undo brings the change back: show it as "Redo"
 		'undone'        => in_array( (int) $row['id'], $undone, true ),
 		'detail_url'    => admin_url( 'tools.php?page=' . LCCB_PAGE . '&tab=activity&entry=' . (int) $row['id'] ),
 	);
@@ -123,9 +124,10 @@ add_action( 'admin_post_lccb_undo', function () {
 } );
 
 function lccb_undo_button( $id, $label = 'Undo' ) {
+	$redo = 0 === strpos( $label, 'Redo' );
 	ob_start();
 	?>
-	<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline" onsubmit="return confirm('Undo this change? The item goes back exactly as it was before it. (The undo itself can be undone too.)');">
+	<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline" onsubmit="return confirm('<?php echo $redo ? esc_js( 'Redo this? It reverses that undo, putting the change back.' ) : esc_js( 'Undo this change? The item goes back exactly as it was before it. (The undo itself can be undone too.)' ); ?>');">
 		<input type="hidden" name="action" value="lccb_undo">
 		<input type="hidden" name="entry" value="<?php echo (int) $id; ?>">
 		<?php wp_nonce_field( 'lccb_undo' ); ?>
@@ -174,7 +176,7 @@ function lccb_render_activity_tab() {
 				</td>
 				<td style="text-align:right">
 					<a class="button button-small" href="<?php echo esc_url( $it['detail_url'] ); ?>">Details</a>
-					<?php echo $it['undone'] ? '' : lccb_undo_button( $it['id'] ); // phpcs:ignore WordPress.Security.EscapeOutput ?>
+					<?php echo $it['undone'] ? '' : lccb_undo_button( $it['id'], $it['is_undo'] ? 'Redo' : 'Undo' ); // phpcs:ignore WordPress.Security.EscapeOutput ?>
 				</td>
 			</tr>
 		<?php endforeach; ?>
@@ -195,7 +197,7 @@ function lccb_render_activity_detail( $id, array $undone ) {
 	echo '<h2 style="margin-top:0">#' . (int) $id . ' ' . esc_html( $it['action'] ) . '</h2>';
 	echo '<p>' . esc_html( $e['summary'] ) . '<br><span style="color:#50575e">' . esc_html( $it['ago'] . ' · ' . $it['target'] . ( $e['restored_from'] ? ' · undid #' . $e['restored_from'] : '' ) ) . '</span></p>';
 	if ( ! $it['undone'] ) {
-		echo '<p>' . lccb_undo_button( $id, 'Undo this change' ) . '</p>'; // phpcs:ignore WordPress.Security.EscapeOutput
+		echo '<p>' . lccb_undo_button( $id, $it['is_undo'] ? 'Redo (reverse this undo)' : 'Undo this change' ) . '</p>'; // phpcs:ignore WordPress.Security.EscapeOutput
 	} else {
 		echo '<p><em>This change has been undone.</em></p>';
 	}
