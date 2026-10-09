@@ -3,7 +3,7 @@
  * Plugin Name: LC Claude Bridge
  * Plugin URI:  https://github.com/scbudgetweb/LiveCanvas-Claude-Bridge
  * Description: Unofficial, local-development only. Not affiliated with Anthropic or LiveCanvas. Connects this site to Claude Code on your Mac: livecanvas MCP tools plus CC Terminal and CC Chat tabs in the LiveCanvas code editor. Refuses to run anywhere that isn't a local Mac install, and offers one-click removal of itself and its leftovers there.
- * Version:     0.15.0
+ * Version:     1.0.0
  * Author:      Shaun Corness
  * License:     GPL-2.0-or-later
  * Requires PHP: 7.4
@@ -13,7 +13,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'LCCB_VERSION', '0.15.0' );
+define( 'LCCB_VERSION', '1.0.0' );
 define( 'LCCB_FILE', __FILE__ );
 define( 'LCCB_DIR', plugin_dir_path( __FILE__ ) );
 define( 'LCCB_URL', plugin_dir_url( __FILE__ ) );
