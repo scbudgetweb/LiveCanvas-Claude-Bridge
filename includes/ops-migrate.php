@@ -412,10 +412,26 @@ function lccb_mig_extract( $html, $url ) {
 	$rec['images'] = array_slice( array_values( $imgs ), 0, 150 );
 
 	// Main content as blocks, without the chrome.
-	foreach ( iterator_to_array( $xp->query( '//script|//style|//noscript|//svg|//template|//header|//footer|//nav|//aside|//*[@role="navigation" or @role="banner" or @role="contentinfo" or @aria-hidden="true"]|//*[contains(@class,"cookie") or contains(@id,"cookie") or contains(@class,"gdpr") or contains(@class,"modal") or contains(@class,"popup") or contains(@class,"skip-link") or contains(@class,"screen-reader") or contains(@class,"sr-only")]' ) ) as $n ) {
+	foreach ( iterator_to_array( $xp->query( '//script|//style|//noscript|//svg|//template|//header|//footer|//nav|//aside|//*[@role="navigation" or @role="banner" or @role="contentinfo" or @aria-hidden="true"]|//*[contains(@class,"skip-link") or contains(@class,"screen-reader") or contains(@class,"sr-only")]' ) ) as $n ) {
 		if ( $n->parentNode ) {
 			$n->parentNode->removeChild( $n );
 		}
+	}
+	// Cookie banners, consent bars and popups, matched precisely: a page about cookies (or a wrapper class like
+	// "page-cookie-policy") must survive. Never remove anything holding the page's h1 or most of its text.
+	$body_len = ( $b = $dom->getElementsByTagName( 'body' )->item( 0 ) ) ? max( 1, strlen( lccb_mig_text( $b ) ) ) : 1;
+	foreach ( iterator_to_array( $xp->query( '//*[@class or @id]' ) ) as $n ) {
+		if ( ! $n->parentNode ) {
+			continue;
+		}
+		$ident = strtolower( $n->getAttribute( 'class' ) . ' ' . $n->getAttribute( 'id' ) );
+		if ( ! preg_match( '/(cookie|gdpr|consent)[-_]?(banner|notice|bar|popup|modal|law|consent|notification|window|wrapper|container|box)|\b(cky-|cmplz|cookieyes|moove_gdpr|borlabs|cn-notice|catapult-cookie|cookie-notice-container|wt-cli)|\b(modal|popup|pum)(-overlay|-container|-wrap)?\b/', $ident ) ) {
+			continue;
+		}
+		if ( $n->getElementsByTagName( 'h1' )->length || strlen( lccb_mig_text( $n ) ) > 0.4 * $body_len ) {
+			continue;
+		}
+		$n->parentNode->removeChild( $n );
 	}
 	$main = null;
 	foreach ( array( '//main', '//*[@role="main"]', '//article', '//*[@id="content"]', '//*[contains(@class,"entry-content")]', '//*[contains(@class,"site-content")]', '//body' ) as $q ) {
