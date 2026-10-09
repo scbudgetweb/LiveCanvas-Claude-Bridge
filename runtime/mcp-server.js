@@ -418,6 +418,36 @@ server.registerTool("lc_compare", {
 	return { content };
 });
 
+// ───────────────────────── Migrate from an old site ─────────────────────────
+
+server.registerTool("lc_migrate_scan", {
+	description: "Crawl the user's OLD website politely (sitemap first, honours robots.txt, one request at a time) and store what it finds locally: per page the SEO title/description/canonical/Open Graph, h1-h3 outline, main content as blocks (header, footer, nav and cookie bars removed), images with alt text, forms with their fields, links, contact details and schema.org data. Runs in ~80-second batches: if it returns status 'partial', call it again with no arguments to continue. Read-only for this site.",
+	inputSchema: {
+		url: z.string().optional().describe("The old site's address (e.g. https://oldsite.co.uk, or a local .test copy). Omit to continue the last crawl."),
+		max_pages: z.number().int().min(1).max(500).optional().describe("Default 100"),
+		fresh: z.boolean().optional().describe("Start over instead of continuing a stored crawl of that site"),
+	},
+}, async (args) => json(await wpRun("migrate_scan", args, 150000)));
+serverTool("lc_migrate_site", "Overview of the crawled old site: every page (path, guessed type: home/service/about/contact/blog post/legal…, title, h1, word count, images, forms), the main menu, emails/phones/social links, business details from schema.org. Use it to propose the new sitemap. Read-only.", { host: z.string().optional().describe("Defaults to the most recent crawl") }, "migrate_site");
+serverTool("lc_migrate_page", "One crawled old page: SEO fields, headings, its own content blocks in order (text, lists, quotes, images, buttons, embeds, tables; blocks repeated across the site removed), images (with media-library URLs once imported), forms and schema. Read-only.", { url: z.string().describe("The old page's URL or path, e.g. /about-us"), host: z.string().optional() }, "migrate_page");
+server.registerTool("lc_media_import_batch", {
+	description: "Plan importing images (e.g. an old page's images from lc_migrate_page) into the media library in one go: de-duplicated against earlier imports, alt text taken from the old site where it had any." + PREVIEW_NOTE + " Undo deletes the whole batch.",
+	inputSchema: {
+		urls: z.array(z.string()).max(60),
+		alts: z.record(z.string()).optional().describe("Alt text to use per URL (overrides the old site's)"),
+		alt_from_source: z.boolean().optional().describe("Default true"),
+	},
+}, async (args) => previewText(await wpRun("media_import_batch", args, 30000)));
+server.registerTool("lc_redirect_map", {
+	description: "Build the redirect map from the crawled old site's URLs to this site's pages (same path = no redirect; then same slug; then similar title; plus your manual `map`), and write it to a file in the site root for the live site: Redirection plugin CSV (default), .htaccess, nginx or plain CSV. Lists old URLs it couldn't match so you can decide (map them to a page id/path, \"410\" for gone, or fallback: \"home\").",
+	inputSchema: {
+		host: z.string().optional(),
+		format: z.enum(["redirection-csv", "htaccess", "nginx", "csv"]).optional(),
+		map: z.record(z.union([z.string(), z.number()])).optional().describe("Manual pairs: {\"/old-path\": <new page id | \"/new-path\" | \"410\">}"),
+		fallback: z.enum(["none", "home"]).optional().describe("Send unmatched old URLs to the home page (default: leave them unmatched)"),
+	},
+}, async (args) => json(await wpRun("redirect_map", args, 60000)));
+
 // ───────────────────────── Section library (LiveCanvas lc_section) ─────────────────────────
 
 const sectionRef = { id: z.number().int().optional(), slug: z.string().optional() };

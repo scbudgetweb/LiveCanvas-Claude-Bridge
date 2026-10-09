@@ -49,6 +49,16 @@ Unofficial WordPress plugin that connects the [LiveCanvas](https://livecanvas.co
   - `lc_html_template_assets` copies the template's own CSS, JS and fonts into the **child theme**, with a managed enqueue block in `functions.php`, and imports its images into the **media library**. Undo removes exactly what it added. You can scope the template's CSS under `.tpl-<name>` so it can't clash with Bootstrap.
   - `lc_html_template_preview` and `lc_compare` render the original template next to the rebuilt section at 1200 and 390px, with the differences highlighted and a pixel-difference score.
   - Everything imported lives in the theme and media library, so the site keeps working after you delete this plugin.
+- **Migrate from an old site:**
+  - `lc_migrate_scan` crawls the old site politely: sitemap first, `robots.txt` honoured, one request at a time. It stores the crawl locally, and a big site continues over several calls.
+  - **Per page** it captures:
+    - the SEO title, description, canonical and Open Graph tags
+    - the heading outline
+    - the main content as clean blocks, without the header, footer, menus or cookie bars
+    - images with their alt text, forms and their fields, and schema.org data
+  - `lc_migrate_site` gives the overview: a page tree with a guessed type for each page, the menu, contact details and social links.
+  - `lc_media_import_batch` imports images in bulk, de-duplicated, with the old site's alt text. Undo deletes the whole batch.
+  - `lc_redirect_map` pairs old URLs with new pages (same path, then same slug, then a similar title, plus your own choices). It writes a Redirection plugin CSV, `.htaccess` rules or nginx rules to the site root, ready for the live site.
 - **Section library:** list, read, create and update LiveCanvas's reusable sections, see where each is used, and swap inline copies on pages for the section's shortcode (`lc_section_replace_inline`).
 - **Design tokens (Picostrap):**
   - Claude reads and changes the theme's SCSS variables (colours, fonts, sizes, `$enable-*` switches) and web-font links, with a preview first.

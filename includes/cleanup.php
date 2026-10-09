@@ -158,7 +158,7 @@ function lccb_cleanup() {
 
 	// Backups of the CSS bundle and the CC Chat image inbox (both inside uploads).
 	$up = wp_upload_dir();
-	foreach ( array( 'lccb-backups' => 'CSS bundle backups', 'lccb-inbox' => 'CC Chat image inbox' ) as $folder => $label ) {
+	foreach ( array( 'lccb-backups' => 'CSS bundle backups', 'lccb-inbox' => 'CC Chat image inbox', 'lccb-migrations' => 'old-site crawls' ) as $folder => $label ) {
 		$dir = $up['basedir'] . '/' . $folder;
 		if ( is_dir( $dir ) ) {
 			require_once ABSPATH . 'wp-admin/includes/file.php';
@@ -179,7 +179,7 @@ function lccb_cleanup() {
 	delete_option( LCCB_BINDING_OPTION );
 	delete_option( LCCB_SETTINGS_OPTION );
 	global $wpdb;
-	$wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name = 'lccb_tpl_enqueue' OR option_name LIKE 'lccb\\_tpl\\_map\\_%'" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+	$wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name = 'lccb_tpl_enqueue' OR option_name LIKE 'lccb\\_tpl\\_map\\_%' OR option_name LIKE 'lccb\\_mig\\_media\\_%'" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 	$wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE '\\_transient\\_lccb\\_%' OR option_name LIKE '\\_transient\\_timeout\\_lccb\\_%'" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 	$steps[] = array( 'ok' => true, 'text' => 'Removed plugin settings and the change history (audit log) from the database' );
 

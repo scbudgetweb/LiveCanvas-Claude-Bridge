@@ -18,6 +18,7 @@ const LCCB_TOOL_LABELS = array(
 	'lc_tokens_update'   => 'Design tokens',
 	'lc_media_import'    => 'Imported image',
 	'lc_html_template_assets' => 'Imported template assets',
+	'lc_media_import_batch' => 'Imported images',
 	'lc_section_create'  => 'Created section',
 	'lc_section_update'  => 'Updated section',
 	'lc_section_replace_inline' => 'Section → shortcode',
@@ -37,6 +38,8 @@ function lccb_activity_target( array $row ) {
 	switch ( $row['target_type'] ) {
 		case 'tokens':
 			return array( 'label' => 'Theme design tokens', 'links' => array( 'Customizer' => admin_url( 'customize.php' ) ) );
+		case 'media_batch':
+			return array( 'label' => 'Images imported from the old site', 'links' => array( 'Media' => admin_url( 'upload.php' ) ) );
 		case 'template_assets':
 			return array( 'label' => 'Template assets in the child theme', 'links' => array() );
 		case 'media':
