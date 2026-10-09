@@ -336,6 +336,46 @@
 			};
 		},
 
+		/** The largest width (CSS px) each image is displayed at, across preview widths: {url: px}. */
+		async measure_images({ widths }) {
+			const iframe = document.getElementById("previewiframe");
+			if (!iframe || !iframe.contentDocument) throw new Error("The LiveCanvas preview isn't available.");
+			const list = (Array.isArray(widths) && widths.length ? widths : [1440, 390]).slice(0, 4);
+			const prev = { width: iframe.style.width, scroll: iframe.contentWindow.scrollY };
+			const settle = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(r, 500))));
+			const out = {};
+			const note = (url, px) => {
+				if (!url || /^data:/.test(url)) return;
+				const key = url.replace(/[?#].*$/, "");
+				out[key] = Math.max(out[key] || 0, Math.round(px));
+			};
+			try {
+				for (const w of list) {
+					iframe.style.width = w + "px";
+					await settle();
+					const doc = iframe.contentDocument;
+					const win = iframe.contentWindow;
+					doc.querySelectorAll("img").forEach((img) => {
+						const px = img.getBoundingClientRect().width;
+						if (px < 1) return;
+						note(img.src, px);
+						if (img.currentSrc && img.currentSrc !== img.src) note(img.currentSrc, px);
+					});
+					doc.querySelectorAll("main#lc-main *, header *, footer *").forEach((el) => {
+						const bg = win.getComputedStyle(el).backgroundImage;
+						if (!bg || bg === "none") return;
+						const m = bg.match(/url\(["']?([^"')]+)/);
+						if (m) note(new URL(m[1], doc.baseURI).href, el.getBoundingClientRect().width);
+					});
+				}
+			} finally {
+				iframe.style.width = prev.width;
+				await settle();
+				iframe.contentWindow.scrollTo(0, prev.scroll);
+			}
+			return out;
+		},
+
 		/** Rendered-preview inspection: markup, box, computed styles, children, matching CSS rules. */
 		async inspect({ selector, depth = 1, all = false }) {
 			const iframe = document.getElementById("previewiframe");

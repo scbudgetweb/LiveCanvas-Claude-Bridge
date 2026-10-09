@@ -482,6 +482,12 @@ function lccb_op_audit_restore( array $args ) {
 		$lines[] = $bundle && is_file( $bundle ) ? 'CSS bundle: restored from the backup taken before that change (no recompile needed)' : 'CSS bundle: no backup found; run lc_css_recompile afterwards';
 		return array( 'preview_id' => $id, 'applied' => false, 'summary' => "Undo #{$entry['id']}", 'changes' => $lines, 'content_diff' => '', 'warnings' => array(), 'next' => 'Call lc_apply_change with this preview_id to restore.' );
 	}
+	if ( in_array( $entry['target_type'], array( 'image_optimise', 'media_meta' ), true ) ) {
+		if ( 'lc_audit_restore' === $entry['tool'] ) {
+			throw new Exception( 'That entry was itself an undo; redo the change with the original tool instead.' );
+		}
+		return 'image_optimise' === $entry['target_type'] ? lccb_img_restore_optimise_preview( $entry ) : lccb_img_restore_meta_preview( $entry );
+	}
 	if ( 'media_batch' === $entry['target_type'] ) {
 		if ( 'lc_audit_restore' === $entry['tool'] ) {
 			throw new Exception( 'That entry already deleted a batch of images; import them again with lc_media_import_batch.' );
@@ -542,6 +548,10 @@ function lccb_op_apply_change( array $args ) {
 			'undo'     => "lc_audit_restore {\"id\": $audit_id} previews undoing this.",
 			'next'     => $restored ? 'Done: tokens and the previous CSS bundle are back. Reload the builder preview (or take an lc_screenshot) to check.' : 'Tokens saved. Now run lc_css_recompile to rebuild the theme CSS, then lc_screenshot to check.',
 		);
+	}
+	$img_kinds = array( 'image_optimise' => 'lccb_img_apply_optimise', 'image_optimise_undo' => 'lccb_img_apply_optimise_undo', 'image_crop' => 'lccb_img_apply_crop', 'media_meta' => 'lccb_img_apply_meta', 'media_meta_undo' => 'lccb_img_apply_meta_undo' );
+	if ( isset( $img_kinds[ $plan['kind'] ] ) ) {
+		return call_user_func( $img_kinds[ $plan['kind'] ], $plan, $id, $restored_from );
 	}
 	if ( 'media_batch' === $plan['kind'] ) {
 		return lccb_mig_apply_media_batch( $plan, $id, $restored_from );

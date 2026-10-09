@@ -59,6 +59,12 @@ Unofficial WordPress plugin that connects the [LiveCanvas](https://livecanvas.co
   - `lc_migrate_site` gives the overview: a page tree with a guessed type for each page, the menu, contact details and social links.
   - `lc_media_import_batch` imports images in bulk, de-duplicated, with the old site's alt text. Undo deletes the whole batch.
   - `lc_redirect_map` pairs old URLs with new pages (same path, then same slug, then a similar title, plus your own choices). It writes a Redirection plugin CSV, `.htaccess` rules or nginx rules to the site root, ready for the live site.
+- **Images:**
+  - `lc_image_audit` checks every image on a page or the whole site: file size, real dimensions against the size it's actually displayed at (measured in the builder at 1440 and 390px), format, alt text, width/height and lazy-loading.
+  - `lc_image_optimise` converts images to **WebP or AVIF** and resizes them, as new media items. It rewrites every reference in pages, partials, sections and Global CSS (including srcset and `wp-image-ID` classes). The originals are kept, so undo is exact.
+  - `lc_image_crop` makes a cropped copy at an aspect ratio around a focus point, and shows Claude a preview first.
+  - `lc_media_read` lets Claude **look at** an image. `lc_media_update` saves the alt text it writes and fills it into pages where it's missing.
+  - `lc_stock_search` searches **Openverse** for openly licensed photos and returns one numbered contact sheet. `lc_stock_import` adds the chosen photo with its licence credit in the caption.
 - **Section library:** list, read, create and update LiveCanvas's reusable sections, see where each is used, and swap inline copies on pages for the section's shortcode (`lc_section_replace_inline`).
 - **Design tokens (Picostrap):**
   - Claude reads and changes the theme's SCSS variables (colours, fonts, sizes, `$enable-*` switches) and web-font links, with a preview first.

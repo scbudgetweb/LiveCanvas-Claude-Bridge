@@ -78,7 +78,7 @@ function call(cmd, args = {}) {
 	if (!hub || hub.readyState !== 1) return Promise.reject(new Error(hubError || "Connecting to the LC Claude Bridge hub. Try again in a moment."));
 	const id = `m${++seq}`;
 	return new Promise((resolve, reject) => {
-		const limit = cmd === "screenshot" || cmd === "template_shot" ? 65000 : ["css_recompile", "responsive_check", "compare"].includes(cmd) ? 125000 : TIMEOUT_MS;
+		const limit = cmd === "screenshot" || cmd === "template_shot" || cmd === "measure_images" ? 65000 : ["css_recompile", "responsive_check", "compare"].includes(cmd) ? 125000 : TIMEOUT_MS;
 		const timer = setTimeout(() => { pending.delete(id); reject(new Error(`No answer to '${cmd}' within ${limit / 1000}s`)); }, limit);
 		pending.set(id, { resolve, reject, timer });
 		hub.send(JSON.stringify({ id, cmd, args }));
@@ -447,6 +447,94 @@ server.registerTool("lc_redirect_map", {
 		fallback: z.enum(["none", "home"]).optional().describe("Send unmatched old URLs to the home page (default: leave them unmatched)"),
 	},
 }, async (args) => json(await wpRun("redirect_map", args, 60000)));
+
+// ───────────────────────── Images ─────────────────────────
+
+// Results with an `image` field ({media_type, data}) come back as an image Claude can see plus the rest as JSON.
+const withImage = (r) => {
+	const { image, ...rest } = r || {};
+	const content = [];
+	if (image && image.data) content.push({ type: "image", data: image.data, mimeType: image.media_type });
+	if (rest.preview_id) {
+		const t = previewText(rest);
+		content.push(...t.content);
+	} else {
+		content.push({ type: "text", text: JSON.stringify(rest, null, 2) });
+	}
+	return { content };
+};
+
+server.registerTool("lc_image_audit", {
+	description: "Audit images: every image a page (or the whole site) uses, with file size, real dimensions, format and alt text, flagging heavy or oversized files, JPEG/PNG that should be WebP, missing alt, missing width/height and missing lazy-loading, plus images hotlinked from other sites. For the page open in the builder it also measures the size each image is actually displayed at (1440 and 390px), so you can see e.g. a 2400px file shown at 400px. Read-only.",
+	inputSchema: {
+		scope: z.enum(["page", "site"]).optional().describe("Default 'page': the page open in the builder (or `id`)"),
+		id: z.number().int().optional().describe("A saved page/partial/section instead of the open page"),
+	},
+}, async ({ scope = "page", id }) => {
+	if (scope === "site" || id) return json(await wpRun("image_audit", { scope, id }, 120000));
+	let live;
+	try {
+		const ctx = await call("context", {});
+		const html = await call("read_html", { selector: "main#lc-main" });
+		let measured = {};
+		try { measured = await call("measure_images", { widths: [1440, 390] }); } catch (_) {}
+		live = { html: html.html, label: `open page "${ctx.post.title}" (#${ctx.post.id})`, measured };
+	} catch (err) {
+		throw new Error(`${err.message} To audit without the builder, pass an id or scope 'site'.`);
+	}
+	return json(await wpRun("image_audit", { scope, ...live }, 120000));
+});
+
+server.registerTool("lc_image_optimise", {
+	description: "Plan converting/resizing images (by attachment id or URL) to WebP (default) or AVIF, capped at max_width. Each becomes a NEW media item with all its sizes; on apply every reference in LiveCanvas pages, partials, templates, sections and Global CSS is rewritten (including srcset sizes and wp-image-ID classes). Originals are kept, so lc_audit_restore puts everything back exactly. The preview shows real before/after file sizes." + PREVIEW_NOTE,
+	inputSchema: {
+		ids: z.array(z.number().int()).optional(),
+		urls: z.array(z.string()).optional(),
+		format: z.enum(["webp", "avif", "keep"]).optional().describe("Default webp (AVIF is smaller but slower to encode)"),
+		max_width: z.number().int().min(200).max(6000).optional().describe("Default 2560; use ~2× the largest displayed width from lc_image_audit"),
+		quality: z.number().int().min(40).max(95).optional().describe("Default 82"),
+	},
+}, async (args) => previewText(await wpRun("image_optimise", args, 180000)));
+
+server.registerTool("lc_image_crop", {
+	description: "Plan a cropped COPY of an image at an aspect ratio (e.g. '16:9', '4:3', '1:1', '3:4'), centred on focus {x, y} (0-1, from your own look at the image with lc_media_read). Returns a preview image of the crop so you can check the framing, then lc_apply_change creates the new media item (original kept).",
+	inputSchema: {
+		id: z.number().int(),
+		aspect: z.string(),
+		focus: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) }).optional(),
+		width: z.number().int().min(200).max(6000).optional().describe("Output width (default: as large as the crop allows, max 2560)"),
+	},
+}, async (args) => withImage(await wpRun("image_crop", args, 120000)));
+
+server.registerTool("lc_media_read", {
+	description: "Look at an image from the media library (by id or URL): returns the image itself so you can SEE it, plus its file details, title, alt text, caption and description. Use it to write accurate alt text or choose a crop focus. Read-only.",
+	inputSchema: { id: z.number().int().optional(), url: z.string().optional(), max_edge: z.number().int().min(200).max(1568).optional() },
+}, async (args) => withImage(await wpRun("media_read", args, 60000)));
+
+serverTool("lc_media_update", "Plan saving image details (alt text, title, caption, description) for one image or many (`updates`), and by default also fill that alt text into <img> tags on LiveCanvas pages where it's missing or empty (fill_page_alts: false to skip). Write alt text that says what the image shows and why it matters, after looking at it with lc_media_read." + PREVIEW_NOTE, {
+	id: z.number().int().optional(),
+	alt: z.string().optional(),
+	title: z.string().optional(),
+	caption: z.string().optional(),
+	description: z.string().optional(),
+	updates: z.array(z.object({ id: z.number().int(), alt: z.string().optional(), title: z.string().optional(), caption: z.string().optional(), description: z.string().optional() })).optional().describe("Several images at once"),
+	fill_page_alts: z.boolean().optional(),
+}, "media_update", previewText);
+
+server.registerTool("lc_stock_search", {
+	description: "Search Openverse for openly licensed photos (Creative Commons / public domain; commercial use allowed by default). Returns ONE contact-sheet image of up to 12 numbered thumbnails you can see, plus each result's id, title, size, licence and creator. Import a chosen one with lc_stock_import.",
+	inputSchema: {
+		query: z.string(),
+		orientation: z.enum(["wide", "tall", "square"]).optional(),
+		license: z.enum(["commercial", "modification", "all"]).optional().describe("commercial (default): usable on a business site; modification: also allows editing (cropping is editing)"),
+		page: z.number().int().min(1).optional(),
+	},
+}, async (args) => withImage(await wpRun("stock_search", args, 90000)));
+
+serverTool("lc_stock_import", "Add an Openverse photo (id from lc_stock_search) to the media library, with alt text and the licence credit stored in its caption. Audited: lc_audit_restore deletes it again.", {
+	id: z.string(),
+	alt: z.string().optional().describe("Describe what the photo shows"),
+}, "stock_import");
 
 // ───────────────────────── Section library (LiveCanvas lc_section) ─────────────────────────
 

@@ -19,6 +19,10 @@ const LCCB_TOOL_LABELS = array(
 	'lc_media_import'    => 'Imported image',
 	'lc_html_template_assets' => 'Imported template assets',
 	'lc_media_import_batch' => 'Imported images',
+	'lc_image_optimise'  => 'Optimised images',
+	'lc_image_crop'      => 'Cropped image',
+	'lc_media_update'    => 'Image details',
+	'lc_stock_import'    => 'Stock photo',
 	'lc_section_create'  => 'Created section',
 	'lc_section_update'  => 'Updated section',
 	'lc_section_replace_inline' => 'Section → shortcode',
@@ -38,6 +42,10 @@ function lccb_activity_target( array $row ) {
 	switch ( $row['target_type'] ) {
 		case 'tokens':
 			return array( 'label' => 'Theme design tokens', 'links' => array( 'Customizer' => admin_url( 'customize.php' ) ) );
+		case 'image_optimise':
+			return array( 'label' => 'Images converted/resized (references rewritten)', 'links' => array( 'Media' => admin_url( 'upload.php' ) ) );
+		case 'media_meta':
+			return array( 'label' => 'Image alt text and details', 'links' => array( 'Media' => admin_url( 'upload.php' ) ) );
 		case 'media_batch':
 			return array( 'label' => 'Images imported from the old site', 'links' => array( 'Media' => admin_url( 'upload.php' ) ) );
 		case 'template_assets':

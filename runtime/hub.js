@@ -26,7 +26,7 @@ const require = createRequire(import.meta.url);
 const pty = require("node-pty");
 const VERSION = JSON.parse(readFileSync(new URL("./package.json", import.meta.url))).version;
 const TIMEOUT_MS = 15000;
-const SLOW_CMDS = new Set(["screenshot", "css_recompile", "responsive_check", "template_shot", "compare"]); // whole-page captures and SCSS compiles take a while
+const SLOW_CMDS = new Set(["screenshot", "css_recompile", "responsive_check", "template_shot", "compare", "measure_images"]); // whole-page captures and SCSS compiles take a while
 const BUFFER_LIMIT = 256 * 1024;
 
 const boot = loadConfig();
