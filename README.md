@@ -32,6 +32,13 @@ Unofficial WordPress plugin that connects the [LiveCanvas](https://livecanvas.co
   - `lc_screenshot`: Claude screenshots the preview at any width (e.g. 412px for mobile) to check its own work.
   - `lc_inspect`: rendered HTML, computed styles and the CSS rules that actually match, including shortcode and plugin output such as Forminator forms.
   - **An auto-generated site brief** in the site's `CLAUDE.md` (a managed block that never touches your own notes), so every Claude Code session starts out knowing the stack.
+- **Site building, with preview then apply:** Claude can work on the rest of the site, even without the builder open:
+  - pages: list, read, create drafts, update, move to the bin, open in the builder
+  - the site-wide header, footer and saved Global JS
+  - LiveCanvas dynamic templates and their display conditions
+
+  Every change is a **preview first**: you see a diff and nothing is written. Only `lc_apply_change` writes, and Claude Code asks you to approve it. It refuses if the target changed since the preview, or if the page is open in a builder.
+- **Change history with undo:** every applied site-level change is stored in an audit log with its before-copy. `lc_audit_restore` puts any of them back exactly, and restores are themselves undoable.
 - **Rollback:** before Claude's first change in each reply, the plugin saves a checkpoint of the page HTML, Global CSS and Global JS. **"↺ Restore to before this"** on your messages puts everything back. It also rewinds files Claude edited, such as theme files, using Claude Code's own file checkpoints.
 - **Works across sites:** one shared background service on your Mac serves every connected site. Each site only ever reaches its own builder.
 
@@ -97,7 +104,7 @@ Nothing that travels with a backup can switch the plugin on:
 
    Your own Claude Code files are kept.
 
-Only administrators see the CC tabs. See [SECURITY.md](SECURITY.md) for the full model. Found a security problem? Please [report it privately](https://github.com/scbudgetweb/LiveCanvas-Claude-Bridge/security/advisories/new) rather than opening an issue.
+Site-level tools act through a PHP command-line runner as the administrator who connected the site. Previews write nothing; only `lc_apply_change` writes, and it's audited. Only administrators see the CC tabs. See [SECURITY.md](SECURITY.md) for the full model. Found a security problem? Please [report it privately](https://github.com/scbudgetweb/LiveCanvas-Claude-Bridge/security/advisories/new) rather than opening an issue.
 
 **Before going live:** in Tools › Claude Code, click Disconnect, then delete the plugin.
 

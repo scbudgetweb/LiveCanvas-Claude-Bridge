@@ -20,6 +20,18 @@ define( 'LCCB_READONLY_TOOLS', array(
 	'mcp__livecanvas__lc_site_context',
 	'mcp__livecanvas__lc_screenshot',
 	'mcp__livecanvas__lc_inspect',
+	// Site-level reads and previews (previews never write; lc_apply_change does, and still asks).
+	'mcp__livecanvas__lc_pages_list',
+	'mcp__livecanvas__lc_page_read',
+	'mcp__livecanvas__lc_page_create',
+	'mcp__livecanvas__lc_page_update',
+	'mcp__livecanvas__lc_partial_read',
+	'mcp__livecanvas__lc_partial_update',
+	'mcp__livecanvas__lc_templates_list',
+	'mcp__livecanvas__lc_template_read',
+	'mcp__livecanvas__lc_template_upsert',
+	'mcp__livecanvas__lc_audit_list',
+	'mcp__livecanvas__lc_audit_restore',
 ) );
 define( 'LCCB_HUB_PORT', defined( 'LC_CLAUDE_BRIDGE_PORT' ) ? (int) LC_CLAUDE_BRIDGE_PORT : 8770 );
 
@@ -483,6 +495,7 @@ function lccb_connect( $force_reinstall = false ) {
 	if ( ! $step( lccb_write_claude_config( $node ), 'Claude Code config: .mcp.json + .claude/settings.local.json' ) ) {
 		return $fail();
 	}
+	lccb_audit_install();
 	$brief = lccb_write_site_brief();
 	$step( (bool) $brief, $brief ? 'Site brief written to CLAUDE.md (managed block)' : 'Could not write CLAUDE.md' );
 	update_option( LCCB_BINDING_OPTION, lccb_binding_value(), false );

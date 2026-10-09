@@ -22,6 +22,10 @@ LiveCanvas Claude Bridge lets a page in your browser (the LiveCanvas editor) dri
   - **Connect and the hub only ever start** the `claude` binary, `launchctl`, `cp`/`rm` on the plugin's own runtime folder, and `ioreg`. All are run with fixed arguments and no shell, and nothing from a request is passed into a command.
   - **The hub only starts `claude`,** and only in a registered site's folder.
 - **Machine binding.** The stored "connected" state is a fingerprint (HMAC) of this Mac's hardware UUID, the site folder and the site URL, signed with the token. A copy of the site on another machine, at another URL or in another folder doesn't match, so it stays dormant.
+- **Site-level writes are previewed, approved and audited.**
+  - **The runner:** these tools run through `runtime/wp-run.php`, a command-line-only script that refuses any web request. It acts as the administrator who connected the site, and refuses unless the site is registered, local and bound to this Mac.
+  - **Previews and approval:** previews write nothing. `lc_apply_change` is the only tool that writes, and it isn't pre-approved, so Claude Code asks you first.
+  - **Audit log:** every apply stores a before-copy in a `{prefix}lccb_audit` table, which cleanup mode removes.
 - **Claude's own permissions still apply.** In CC Chat, every edit or command that Claude Code would normally ask about needs your approval, unless you pick a more permissive mode yourself.
 
 ## Out of scope

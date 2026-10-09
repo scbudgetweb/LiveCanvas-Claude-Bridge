@@ -157,11 +157,12 @@ function lccb_cleanup() {
 	}
 
 	// Database.
+	lccb_audit_uninstall();
 	delete_option( LCCB_BINDING_OPTION );
 	delete_option( LCCB_SETTINGS_OPTION );
 	global $wpdb;
 	$wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE '\\_transient\\_lccb\\_%' OR option_name LIKE '\\_transient\\_timeout\\_lccb\\_%'" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-	$steps[] = array( 'ok' => true, 'text' => 'Removed plugin settings from the database' );
+	$steps[] = array( 'ok' => true, 'text' => 'Removed plugin settings and the change history (audit log) from the database' );
 
 	// The plugin itself (WordPress may need filesystem credentials on some hosts).
 	require_once ABSPATH . 'wp-admin/includes/plugin.php';

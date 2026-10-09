@@ -12,8 +12,21 @@ if ( ! defined( 'ABSPATH' ) ) {
 /** @return array */
 function lccb_ops_dispatch( $command, array $args ) {
 	$ops = array(
-		'context' => 'lccb_op_context',
-		'brief'   => 'lccb_op_brief',
+		'context'         => 'lccb_op_context',
+		'brief'           => 'lccb_op_brief',
+		'pages_list'      => 'lccb_op_pages_list',
+		'page_read'       => 'lccb_op_page_read',
+		'page_create'     => 'lccb_op_page_create',
+		'page_update'     => 'lccb_op_page_update',
+		'partial_read'    => 'lccb_op_partial_read',
+		'partial_update'  => 'lccb_op_partial_update',
+		'templates_list'  => 'lccb_op_templates_list',
+		'template_read'   => 'lccb_op_template_read',
+		'template_upsert' => 'lccb_op_template_upsert',
+		'audit_list'      => 'lccb_op_audit_list',
+		'audit_restore'   => 'lccb_op_audit_restore',
+		'apply_change'    => 'lccb_op_apply_change',
+		'editor_url'      => 'lccb_op_editor_url',
 	);
 	if ( ! isset( $ops[ $command ] ) ) {
 		throw new Exception( "Unknown command: $command" );

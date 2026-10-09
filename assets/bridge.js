@@ -257,6 +257,18 @@
 			};
 		},
 
+		/** Navigate this builder tab to another page/partial/template's LiveCanvas editor. */
+		async open_page({ url, title, discard }) {
+			if (!url || !/^https?:\/\//.test(url) || new URL(url).origin !== location.origin) throw new Error("Can only open pages of this site.");
+			const dirty = typeof window.original_document_html === "string" && window.original_document_html !== window.getPageHTML();
+			if (dirty && !discard) {
+				throw new Error("The builder has unsaved changes. Ask the user whether to save first (lc_save) or discard them (discard: true).");
+			}
+			if (dirty) window.original_document_html = window.getPageHTML(); // skip LiveCanvas's "leave without saving?" prompt
+			setTimeout(() => { location.href = url; }, 400); // let this reply reach Claude first
+			return { opening: title || url, url, discarded_unsaved_changes: !!dirty };
+		},
+
 		async save() {
 			window.jQuery("#main-save").trigger("click");
 			return { triggered: true, note: "Save triggered (HTML, Global CSS and Global JS)." };

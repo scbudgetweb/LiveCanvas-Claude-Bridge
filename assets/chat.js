@@ -149,7 +149,7 @@
 						entry.row.dataset.state = c.is_error ? "error" : "done";
 						const res = R.resultView(c.content, c.is_error);
 						if (res) entry.row.querySelector(".lccb-chat-tool-body").append(res);
-						if (c.is_error) entry.row.open = true;
+						if (c.is_error || R.resultOpensRow(c.content)) entry.row.open = true;
 					}
 				}
 				return;

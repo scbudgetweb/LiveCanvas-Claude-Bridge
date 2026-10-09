@@ -154,6 +154,26 @@
 		lc_save: "Save page",
 	};
 
+	const id = (i) => (i.id ? "#" + i.id : "");
+	const SITE_TOOLS = {
+		lc_site_context: ["Read site context", () => ""],
+		lc_screenshot: ["Screenshot", (i) => [i.area || "visible", i.width ? i.width + "px" : "", i.selector || ""].filter(Boolean).join(" · ")],
+		lc_inspect: ["Inspect", (i) => i.selector],
+		lc_pages_list: ["List pages", (i) => i.search || i.status || ""],
+		lc_page_read: ["Read page", id],
+		lc_page_create: ["Preview new page", (i) => i.title, "preview"],
+		lc_page_update: ["Preview page change", id, "preview"],
+		lc_partial_read: ["Read partial", (i) => i.type || id(i)],
+		lc_partial_update: ["Preview partial change", (i) => i.type || id(i), "preview"],
+		lc_templates_list: ["List templates", () => ""],
+		lc_template_read: ["Read template", id],
+		lc_template_upsert: ["Preview template", (i) => i.title || id(i), "preview"],
+		lc_audit_list: ["Change history", () => ""],
+		lc_audit_restore: ["Preview undo", id, "preview"],
+		lc_apply_change: ["Apply change", (i) => i.preview_id, "apply"],
+		lc_open_page: ["Open in builder", (i) => id(i) + (i.discard ? " · discard unsaved" : "")],
+	};
+
 	/**
 	 * How to show a tool call: a short label + argument, and an optional detail body (diff, code, list).
 	 * @return {{label: string, arg: string, body: Node|null, kind: string, stats?: string}}
@@ -163,6 +183,10 @@
 		const { server, tool } = splitName(name);
 		const rel = (p) => (ctx && ctx.relPath ? ctx.relPath(p) : p);
 
+		if (server === "livecanvas" && SITE_TOOLS[tool]) {
+			const [label, argOf, kind] = SITE_TOOLS[tool];
+			return { label, arg: argOf(input) || "", body: null, kind: kind || "read" };
+		}
 		if (server === "livecanvas" && LC_LABELS[tool]) {
 			const label = LC_LABELS[tool];
 			const arg = input.selector || (tool.endsWith("_css") ? "Global CSS" : tool.endsWith("_js") ? "Global JS" : tool === "lc_get_context" || tool === "lc_save" ? "" : "current selection");
@@ -232,11 +256,37 @@
 	}
 
 	function resultView(content, isError) {
-		const text = resultText(content).replace(/\s+$/, "");
-		if (!text) return null;
 		const wrap = h("div", { class: "lccb-chat-result" + (isError ? " is-error" : "") });
-		wrap.append(h("div", { class: "lccb-chat-result-label", text: isError ? "Error" : "Result" }), codeView(text, { maxLines: 14 }));
+		wrap.append(h("div", { class: "lccb-chat-result-label", text: isError ? "Error" : "Result" }));
+		// Screenshots from lc_screenshot: show the image Claude saw.
+		const images = Array.isArray(content) ? content.filter((c) => c.type === "image" && c.source && c.source.data) : [];
+		images.forEach((img) => wrap.append(h("img", { class: "lccb-chat-result-img", src: `data:${img.source.media_type};base64,${img.source.data}`, alt: "Screenshot" })));
+		const text = resultText(Array.isArray(content) ? content.filter((c) => c.type !== "image") : content).replace(/\s+$/, "");
+		if (!text && !images.length) return null;
+		if (text) {
+			// Previews from the site tools carry a ```diff block: colour it.
+			const m = /^([\s\S]*?)```diff\n([\s\S]*?)\n```([\s\S]*)$/.exec(text);
+			if (m) {
+				if (m[1].trim()) wrap.append(codeView(m[1].trim(), { maxLines: 14 }));
+				const box = h("div", { class: "lccb-chat-diff" });
+				m[2].split("\n").forEach((line) => {
+					const t = line[0] === "+" ? "is-add" : line[0] === "-" ? "is-del" : line.startsWith("@@") || line.startsWith("…") ? "is-fold" : "is-ctx";
+					if (t === "is-fold") return box.append(h("div", { class: "lccb-chat-diff-fold", text: line }));
+					box.append(h("div", { class: "lccb-chat-diff-line " + t }, h("span", { class: "lccb-chat-diff-sign", text: line[0] === "+" || line[0] === "-" ? line[0] : " " }), h("span", { class: "lccb-chat-diff-text", text: line.slice(2) })));
+				});
+				wrap.append(box);
+				if (m[3].trim()) wrap.append(codeView(m[3].trim(), { maxLines: 14 }));
+			} else {
+				wrap.append(codeView(text, { maxLines: 14 }));
+			}
+		}
 		return wrap;
+	}
+
+	/** Previews and screenshots are worth seeing without a click. */
+	function resultOpensRow(content) {
+		const text = resultText(Array.isArray(content) ? content.filter((c) => c.type !== "image") : content);
+		return (Array.isArray(content) && content.some((c) => c.type === "image")) || /```diff|^PREVIEW/.test(text);
 	}
 
 	// ───────────────────────── Stats ─────────────────────────
@@ -305,5 +355,5 @@
 		return el;
 	}
 
-	window.lccbChatRender = { h, markdown, diffView, codeView, presentTool, isHiddenTool, resultView, resultText, statsLine, replyUsage, fmtTokens, fmtSecs, copyButton };
+	window.lccbChatRender = { h, markdown, diffView, codeView, presentTool, isHiddenTool, resultView, resultOpensRow, resultText, statsLine, replyUsage, fmtTokens, fmtSecs, copyButton };
 })();

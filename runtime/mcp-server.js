@@ -234,6 +234,78 @@ tool(
 	"inspect"
 );
 
+// ───────────────────────── Site building: pages, header/footer, templates (preview → apply, audited) ─────────────────────────
+
+const previewText = (r) => {
+	if (!r || !r.preview_id) return json(r);
+	const parts = [`PREVIEW (nothing written yet): ${r.summary}`];
+	if (r.changes && r.changes.length) parts.push("", ...r.changes.map((c) => "• " + c));
+	if (r.content_diff) parts.push("", "```diff", r.content_diff, "```");
+	if (r.warnings && r.warnings.length) parts.push("", ...r.warnings.map((w) => "⚠ " + w));
+	parts.push("", `preview_id: ${r.preview_id}`, r.next);
+	return { content: [{ type: "text", text: parts.join("\n") }] };
+};
+
+const contentEdit = {
+	html: z.string().optional().describe("Full new content (the HTML inside main#lc-main). Prefer old_string/new_string for targeted edits."),
+	old_string: z.string().optional().describe("Exact text to replace in the saved content (read it first)"),
+	new_string: z.string().optional(),
+	replace_all: z.boolean().optional(),
+};
+const PREVIEW_NOTE = " Writes nothing: returns a preview + preview_id; apply it with lc_apply_change.";
+
+serverTool("lc_pages_list", "List the site's pages (LiveCanvas or not) with id, title, slug, status, URL, editor URL and whether each is open in the builder now.", { search: z.string().optional(), status: z.string().optional().describe("e.g. publish, draft") }, "pages_list");
+serverTool("lc_page_read", "Read a page's SAVED content (the HTML inside main#lc-main) plus title/slug/status/template. For the page open in the builder use lc_read_html (it may have unsaved changes).", { id: z.number().int() }, "page_read");
+serverTool("lc_page_create", "Plan a new LiveCanvas page (draft by default, LiveCanvas full-width template)." + PREVIEW_NOTE, {
+	title: z.string(),
+	slug: z.string().optional(),
+	html: z.string().optional().describe("Initial content: sections of HTML as LiveCanvas stores them (inner HTML of main#lc-main)"),
+	status: z.enum(["draft", "publish", "private", "pending"]).optional(),
+	parent: z.number().int().optional(),
+	menu_order: z.number().int().optional(),
+}, "page_create", previewText);
+serverTool("lc_page_update", "Plan changes to a saved page that is NOT open in the builder: title, slug, status (\"trash\" moves it to the bin), parent, order, and/or content." + PREVIEW_NOTE, {
+	id: z.number().int(),
+	title: z.string().optional(),
+	slug: z.string().optional(),
+	status: z.enum(["draft", "publish", "private", "pending", "trash"]).optional(),
+	parent: z.number().int().optional(),
+	menu_order: z.number().int().optional(),
+	...contentEdit,
+}, "page_update", previewText);
+
+serverTool("lc_partial_read", "Read the site-wide header, footer or saved Global JS (LiveCanvas partials).", { type: z.enum(["header", "footer", "global_js"]).optional(), id: z.number().int().optional() }, "partial_read");
+serverTool("lc_partial_update", "Plan a change to the site-wide header, footer or saved Global JS (creates the partial if it doesn't exist and html is given)." + PREVIEW_NOTE, {
+	type: z.enum(["header", "footer", "global_js"]).optional(),
+	id: z.number().int().optional(),
+	title: z.string().optional(),
+	...contentEdit,
+}, "partial_update", previewText);
+
+serverTool("lc_templates_list", "List LiveCanvas dynamic templates (single post, archive, search, WooCommerce pages…) with their display conditions, plus the condition keys LiveCanvas understands.", {}, "templates_list");
+serverTool("lc_template_read", "Read a dynamic template's content and conditions.", { id: z.number().int() }, "template_read");
+serverTool("lc_template_upsert", "Plan creating (no id: title + conditions required) or updating a LiveCanvas dynamic template: content, title, display conditions (is_* keys, replaces the set), menu_order (lower wins), status." + PREVIEW_NOTE, {
+	id: z.number().int().optional(),
+	title: z.string().optional(),
+	conditions: z.array(z.string()).optional().describe("e.g. [\"is_single_post\"] or [\"is_archive_for_post_type_post\", \"is_blog_posts_index\"]"),
+	menu_order: z.number().int().optional(),
+	status: z.enum(["publish", "draft"]).optional(),
+	...contentEdit,
+}, "template_upsert", previewText);
+
+serverTool("lc_audit_list", "List recent site-level changes applied through lc_apply_change (newest first), each with an audit id usable with lc_audit_restore.", { limit: z.number().int().optional(), target_type: z.enum(["page", "partial", "template"]).optional(), target_id: z.number().int().optional() }, "audit_list");
+serverTool("lc_audit_restore", "Plan undoing an audited change: puts the item back exactly as it was before that change (or moves it to the bin if that change created it)." + PREVIEW_NOTE, { id: z.number().int() }, "audit_restore", previewText);
+
+serverTool("lc_apply_change", "Apply a change previewed by lc_page_create / lc_page_update / lc_partial_update / lc_template_upsert / lc_audit_restore. Refuses if the target changed since the preview. The previous version is kept in the audit log (undo with lc_audit_restore).", { preview_id: z.string() }, "apply_change");
+
+server.registerTool("lc_open_page", {
+	description: "Open a page, partial or dynamic template in the LiveCanvas builder (the user's builder tab navigates there). Refuses if the builder has unsaved changes unless discard is true; ask the user before discarding.",
+	inputSchema: { id: z.number().int(), discard: z.boolean().optional() },
+}, async ({ id, discard }) => {
+	const target = await wpRun("editor_url", { id });
+	return json(await call("open_page", { url: target.editor_url, title: target.title, discard: !!discard }));
+});
+
 tool(
 	"lc_save",
 	"Save the page in LiveCanvas (HTML, Global CSS and Global JS). Only call this when the user explicitly asks to save.",
