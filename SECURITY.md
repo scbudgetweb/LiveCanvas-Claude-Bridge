@@ -30,4 +30,4 @@ Anything running as your own user on your Mac can already do what Claude Code ca
 
 ## Reporting a vulnerability
 
-Please **don't open a public issue** for security problems. Use GitHub's private vulnerability reporting instead (the repository's **Security** tab › **Report a vulnerability**). Include steps to reproduce and the plugin, Claude Code and LiveCanvas versions. You should get a reply within a week.
+Please **don't open a public issue** for security problems. Use GitHub's private vulnerability reporting instead: [report a vulnerability](https://github.com/scbudgetweb/LiveCanvas-Claude-Bridge/security/advisories/new), or go to the repository's **Security** tab › **Report a vulnerability**. Include steps to reproduce and the plugin, Claude Code and LiveCanvas versions. You should get a reply within a week.

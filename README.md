@@ -1,5 +1,9 @@
 # LiveCanvas Claude Bridge
 
+[![Latest release](https://img.shields.io/github/v/release/scbudgetweb/LiveCanvas-Claude-Bridge)](https://github.com/scbudgetweb/LiveCanvas-Claude-Bridge/releases/latest)
+[![Licence: GPL v2 or later](https://img.shields.io/badge/licence-GPL--2.0--or--later-blue)](LICENSE)
+![Platform: macOS](https://img.shields.io/badge/platform-macOS-lightgrey)
+
 Unofficial WordPress plugin that connects the [LiveCanvas](https://livecanvas.com) page builder to [Claude Code](https://claude.com/claude-code) on your Mac. Chat with Claude, or use a full terminal, right inside the LiveCanvas code editor. Claude edits your page, Global CSS and Global JS live, with one-click rollback.
 
 **Local development only.** The plugin refuses to run anywhere that isn't a local Mac install, so it's safe to leave in a site you later migrate (see [Safety](#safety)).
@@ -44,7 +48,7 @@ It uses your own Claude Code installation and login. There's no API key, and the
 
 ## Install
 
-1. Download `lc-claude-bridge-x.y.z.zip` from [Releases](../../releases).
+1. Download `lc-claude-bridge-x.y.z.zip` from the [latest release](https://github.com/scbudgetweb/LiveCanvas-Claude-Bridge/releases/latest).
 2. In WordPress, go to Plugins › Add New › Upload Plugin, upload the zip and activate it.
 3. Go to **Tools › Claude Code** and click **Connect**. Connect:
    - finds Node and Claude Code
@@ -88,7 +92,7 @@ Nothing that travels with a backup can switch the plugin on:
 
    Your own Claude Code files are kept.
 
-Only administrators see the CC tabs. See [SECURITY.md](SECURITY.md) for the full model and how to report issues.
+Only administrators see the CC tabs. See [SECURITY.md](SECURITY.md) for the full model. Found a security problem? Please [report it privately](https://github.com/scbudgetweb/LiveCanvas-Claude-Bridge/security/advisories/new) rather than opening an issue.
 
 **Before going live:** in Tools › Claude Code, click Disconnect, then delete the plugin.
 
