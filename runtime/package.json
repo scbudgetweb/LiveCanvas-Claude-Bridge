@@ -1,6 +1,6 @@
 {
   "name": "lc-claude-bridge-runtime",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "private": true,
   "description": "Shared local runtime for LC Claude Bridge: the hub (launchd) and the per-session livecanvas MCP server.",
   "type": "module",
@@ -20,6 +20,7 @@
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/addon-web-links": "^0.12.0",
     "@xterm/xterm": "^6.0.0",
+    "axe-core": "^4.14.0",
     "dompurify": "^3.4.16",
     "marked": "^18.1.0",
     "modern-screenshot": "^4.7.0"

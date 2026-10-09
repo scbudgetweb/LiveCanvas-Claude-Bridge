@@ -26,7 +26,7 @@ const require = createRequire(import.meta.url);
 const pty = require("node-pty");
 const VERSION = JSON.parse(readFileSync(new URL("./package.json", import.meta.url))).version;
 const TIMEOUT_MS = 15000;
-const SLOW_CMDS = new Set(["screenshot", "css_recompile", "responsive_check", "template_shot", "compare", "measure_images"]); // whole-page captures and SCSS compiles take a while
+const SLOW_CMDS = new Set(["screenshot", "css_recompile", "responsive_check", "template_shot", "compare", "measure_images", "axe_run"]); // whole-page captures and SCSS compiles take a while
 const BUFFER_LIMIT = 256 * 1024;
 
 const boot = loadConfig();
@@ -106,7 +106,7 @@ function acceptMcp(socket, site) {
 			});
 		}
 		const hubId = `h${++seq}`;
-		const limit = ["css_recompile", "responsive_check", "compare"].includes(msg.cmd) ? 120000 : SLOW_CMDS.has(msg.cmd) ? 60000 : TIMEOUT_MS;
+		const limit = msg.cmd === "axe_run" ? 600000 : ["css_recompile", "responsive_check", "compare"].includes(msg.cmd) ? 120000 : SLOW_CMDS.has(msg.cmd) ? 60000 : TIMEOUT_MS;
 		const timer = setTimeout(() => {
 			pending.delete(hubId);
 			send(socket, { id: msg.id, ok: false, error: `Editor did not answer '${msg.cmd}' within ${limit / 1000}s` });

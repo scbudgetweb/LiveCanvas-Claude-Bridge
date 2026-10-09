@@ -78,7 +78,7 @@ function call(cmd, args = {}) {
 	if (!hub || hub.readyState !== 1) return Promise.reject(new Error(hubError || "Connecting to the LC Claude Bridge hub. Try again in a moment."));
 	const id = `m${++seq}`;
 	return new Promise((resolve, reject) => {
-		const limit = cmd === "screenshot" || cmd === "template_shot" || cmd === "measure_images" ? 65000 : ["css_recompile", "responsive_check", "compare"].includes(cmd) ? 125000 : TIMEOUT_MS;
+		const limit = cmd === "axe_run" ? 605000 : cmd === "screenshot" || cmd === "template_shot" || cmd === "measure_images" ? 65000 : ["css_recompile", "responsive_check", "compare"].includes(cmd) ? 125000 : TIMEOUT_MS;
 		const timer = setTimeout(() => { pending.delete(id); reject(new Error(`No answer to '${cmd}' within ${limit / 1000}s`)); }, limit);
 		pending.set(id, { resolve, reject, timer });
 		hub.send(JSON.stringify({ id, cmd, args }));
@@ -535,6 +535,38 @@ serverTool("lc_stock_import", "Add an Openverse photo (id from lc_stock_search) 
 	id: z.string(),
 	alt: z.string().optional().describe("Describe what the photo shows"),
 }, "stock_import");
+
+// ───────────────────────── Quality pass + launch checklist ─────────────────────────
+
+server.registerTool("lc_qa", {
+	description: "Quality pass with a prioritised fix list (critical / should fix / nice to have): accessibility (axe-core in the real rendered page: contrast, labels, landmarks, ARIA…), SEO (titles, descriptions, duplicates, h1, canonical, noindex, Open Graph, sitemap, robots.txt, SEO plugin), performance (page weight and largest files, render-blocking, lazy-loading, image dimensions, fonts, caching), links (broken internal and external links, missing #anchors, malformed mailto/tel), forms (form plugin, notification recipients: flags developer/test addresses) and site basics (favicon, 404, privacy page, cookie consent vs analytics, WP_DEBUG, default content, permalinks, timezone). scope 'page' = the page open in the builder (accessibility on the live preview, unsaved changes included) or `id`; 'site' = all published pages. launch: true adds the go-live checklist and writes launch-report.md in the site root. Read-only otherwise; can take a few minutes for a whole site.",
+	inputSchema: {
+		scope: z.enum(["page", "site"]).optional().describe("Default 'page'"),
+		id: z.number().int().optional().describe("For scope 'page': a page/post instead of the one open in the builder"),
+		checks: z.array(z.enum(["accessibility", "seo", "performance", "links", "forms", "basics"])).optional().describe("Default: all"),
+		launch: z.boolean().optional().describe("Go-live mode: checklist + launch-report.md (implies the site-wide basics)"),
+	},
+}, async ({ scope = "page", id, checks, launch }) => {
+	let pageId = id;
+	let preview = false;
+	if (scope === "page" && !pageId) {
+		const ctx = await call("context", {});
+		pageId = Number(ctx.post.id);
+		preview = true;
+	}
+	const wanted = checks && checks.length ? checks : ["accessibility", "seo", "performance", "links", "forms", "basics"];
+	let a11y = [];
+	if (wanted.includes("accessibility")) {
+		try {
+			const targets = await wpRun("qa_targets", { scope, id: pageId });
+			const urls = preview ? [] : targets.pages.map((p) => ({ url: p.qa_url, where: `"${p.title}" (${p.url})` }));
+			a11y = (await call("axe_run", { urls, preview })).results;
+		} catch (err) {
+			a11y = [{ where: scope === "site" ? "site" : "this page", violations: [], error: err.message }];
+		}
+	}
+	return json(await wpRun("qa", { scope, id: pageId, checks: wanted, launch: !!launch, a11y }, 590000));
+});
 
 // ───────────────────────── Section library (LiveCanvas lc_section) ─────────────────────────
 

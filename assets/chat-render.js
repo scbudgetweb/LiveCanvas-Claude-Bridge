@@ -178,6 +178,7 @@
 		lc_media_update: ["Preview image details", (i) => (i.updates ? i.updates.length + " image(s)" : "#" + i.id), "preview"],
 		lc_stock_search: ["Stock photos", (i) => i.query],
 		lc_stock_import: ["Import stock photo", (i) => i.id, "apply"],
+		lc_qa: [(i) => (i.launch ? "Launch check" : "Quality check"), (i) => [i.scope || "page", i.id ? "#" + i.id : "", (i.checks || []).join("/")].filter(Boolean).join(" · ")],
 		lc_sections_list: ["List sections", () => ""],
 		lc_section_read: ["Read section", (i) => i.slug || id(i)],
 		lc_section_usage: ["Section usage", (i) => i.slug || id(i)],
@@ -216,7 +217,7 @@
 
 		if (server === "livecanvas" && SITE_TOOLS[tool]) {
 			const [label, argOf, kind] = SITE_TOOLS[tool];
-			return { label, arg: argOf(input) || "", body: null, kind: kind || "read" };
+			return { label: typeof label === "function" ? label(input) : label, arg: argOf(input) || "", body: null, kind: kind || "read" };
 		}
 		if (server === "livecanvas" && LC_LABELS[tool]) {
 			const label = LC_LABELS[tool];

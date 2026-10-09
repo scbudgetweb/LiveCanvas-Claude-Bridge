@@ -336,6 +336,40 @@
 			};
 		},
 
+		/**
+		 * Accessibility check with axe-core: on the open page's preview (unsaved changes included), or on pages of
+		 * this site loaded one by one in a hidden frame. Returns violations grouped per rule, with fixes.
+		 */
+		async axe_run({ urls, preview }) {
+			const results = [];
+			if (preview) {
+				const iframe = document.getElementById("previewiframe");
+				if (!iframe || !iframe.contentDocument) throw new Error("The LiveCanvas preview isn't available.");
+				results.push({ where: "the open page (builder preview)", ...(await axeIn(iframe.contentWindow, [".lc-contextual-menu", "#lc-interface", "#wpadminbar"])) });
+			}
+			for (const u of (Array.isArray(urls) ? urls : []).slice(0, 40)) {
+				const frame = document.createElement("iframe");
+				frame.setAttribute("aria-hidden", "true");
+				frame.style.cssText = "position:fixed;left:-6000px;top:0;width:1280px;height:900px;border:0;pointer-events:none;";
+				document.body.appendChild(frame);
+				try {
+					if (new URL(u.url, location.href).origin !== location.origin) throw new Error("not this site");
+					await new Promise((resolve, reject) => {
+						const t = setTimeout(() => reject(new Error("didn't load within 30s")), 30000);
+						frame.onload = () => { clearTimeout(t); resolve(); };
+						frame.src = u.url;
+					});
+					await new Promise((r) => setTimeout(r, 400));
+					results.push({ where: u.where, ...(await axeIn(frame.contentWindow, ["#wpadminbar"])) });
+				} catch (err) {
+					results.push({ where: u.where, violations: [], error: err.message || String(err) });
+				} finally {
+					frame.remove();
+				}
+			}
+			return { results };
+		},
+
 		/** The largest width (CSS px) each image is displayed at, across preview widths: {url: px}. */
 		async measure_images({ widths }) {
 			const iframe = document.getElementById("previewiframe");
@@ -829,6 +863,37 @@
 		ctx.fillStyle = score <= 12 ? "#166534" : "#9f1239";
 		ctx.fillText(`Difference ${score.toFixed(1)}%`, (COL + GAP) * 2 + 2, 16);
 		return { score, composite: out, heightA: Math.round(a.height), heightB: Math.round(b.height) };
+	}
+
+	// ───────────────────────── Accessibility (axe-core) ─────────────────────────
+
+	async function axeIn(win, exclude) {
+		const doc = win.document;
+		if (!win.axe) {
+			await new Promise((resolve, reject) => {
+				const s = doc.createElement("script");
+				s.src = config.axe;
+				s.onload = resolve;
+				s.onerror = () => reject(new Error("couldn't load axe-core"));
+				doc.head.appendChild(s);
+			});
+		}
+		const context = { include: [doc], exclude: exclude.filter((sel) => doc.querySelector(sel)).map((sel) => [sel]) };
+		const r = await win.axe.run(context, {
+			resultTypes: ["violations"],
+			runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"] },
+		});
+		return {
+			violations: r.violations.map((v) => ({
+				id: v.id,
+				impact: v.impact || "minor",
+				help: v.help,
+				count: v.nodes.length,
+				targets: v.nodes.slice(0, 5).map((n) => [].concat(n.target).join(" ")),
+				fix: (v.nodes[0] && v.nodes[0].failureSummary ? v.nodes[0].failureSummary.replace(/\s+/g, " ").slice(0, 300) : v.description),
+				url: v.helpUrl,
+			})),
+		};
 	}
 
 	// ───────────────────────── Inspect helpers ─────────────────────────

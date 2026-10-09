@@ -23,6 +23,7 @@ add_action( 'lc_editor_header', function () {
 		'port'    => LCCB_HUB_PORT,
 		'site'    => lccb_site_id(),
 		'token'   => lccb_token(),
+		'axe'     => $src( 'vendor/axe.min.js' ),
 	);
 	?>
 	<script>window.lccbConfig = <?php echo wp_json_encode( $config ); ?>;</script>

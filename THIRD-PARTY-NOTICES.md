@@ -12,6 +12,7 @@ LiveCanvas Claude Bridge is licensed under GPL-2.0-or-later. The release zip bun
 | marked | 18.1.0 | MIT | https://github.com/markedjs/marked |
 | DOMPurify | 3.4.16 | MPL-2.0 OR Apache-2.0 (used under Apache-2.0) | https://github.com/cure53/DOMPurify |
 | modern-screenshot | 4.7.0 | MIT | https://github.com/qq15725/modern-screenshot |
+| axe-core | 4.14.0 | MPL-2.0 (unmodified; source at the link) | https://github.com/dequelabs/axe-core |
 
 ## Runtime (runtime/node_modules/)
 

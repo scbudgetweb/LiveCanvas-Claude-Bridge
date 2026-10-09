@@ -150,6 +150,11 @@ function lccb_cleanup() {
 		$steps[] = array( 'ok' => true, 'text' => 'Kept the .claude folder: it holds your own Claude Code files (e.g. your saved permissions or plans), not the plugin\'s. Delete it yourself if it shouldn\'t be on this server.' );
 	}
 
+	// The launch report this plugin writes (local only).
+	if ( is_file( lccb_site_root() . '/launch-report.md' ) && false !== strpos( (string) file_get_contents( lccb_site_root() . '/launch-report.md', false, null, 0, 600 ), 'LC Claude Bridge' ) ) {
+		$steps[] = array( 'ok' => @unlink( lccb_site_root() . '/launch-report.md' ), 'text' => 'Deleted launch-report.md' );
+	}
+
 	// CLAUDE.md: only our managed block.
 	$brief = lccb_remove_site_brief();
 	if ( $brief ) {

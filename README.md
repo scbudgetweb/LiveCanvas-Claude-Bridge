@@ -65,6 +65,14 @@ Unofficial WordPress plugin that connects the [LiveCanvas](https://livecanvas.co
   - `lc_image_crop` makes a cropped copy at an aspect ratio around a focus point, and shows Claude a preview first.
   - `lc_media_read` lets Claude **look at** an image. `lc_media_update` saves the alt text it writes and fills it into pages where it's missing.
   - `lc_stock_search` searches **Openverse** for openly licensed photos and returns one numbered contact sheet. `lc_stock_import` adds the chosen photo with its licence credit in the caption.
+- **Quality pass and launch checklist:** `lc_qa` checks the open page or the whole site and returns one prioritised fix list (critical, should fix, nice to have). Issues that repeat across pages are grouped. It covers:
+  - **Accessibility:** axe-core runs in the real rendered pages (contrast, alt text, labels, landmarks, ARIA, touch targets).
+  - **SEO:** titles and descriptions (including duplicates), h1, canonical, stray `noindex`, Open Graph, sitemap, `robots.txt`, and whether an SEO plugin is installed.
+  - **Performance:** page weight and the largest files, render-blocking CSS/JS, lazy-loading, image dimensions, fonts, caching.
+  - **Links:** broken internal and external links, missing `#anchors`, malformed `mailto:` and `tel:` links.
+  - **Forms:** which form plugin each uses and who its notifications go to (a developer or test address gets flagged).
+  - **Basics:** favicon, 404 page, privacy policy page, cookie consent versus analytics, `WP_DEBUG`, WordPress's default content, permalinks.
+  - **Launch mode** (`launch: true`) adds a go-live checklist and writes `launch-report.md` to the site root.
 - **Section library:** list, read, create and update LiveCanvas's reusable sections, see where each is used, and swap inline copies on pages for the section's shortcode (`lc_section_replace_inline`).
 - **Design tokens (Picostrap):**
   - Claude reads and changes the theme's SCSS variables (colours, fonts, sizes, `$enable-*` switches) and web-font links, with a preview first.

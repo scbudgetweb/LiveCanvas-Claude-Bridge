@@ -33,6 +33,7 @@ define( 'LCCB_READONLY_TOOLS', array(
 	'mcp__livecanvas__lc_media_read',
 	'mcp__livecanvas__lc_media_update',
 	'mcp__livecanvas__lc_stock_search',
+	'mcp__livecanvas__lc_qa',
 	'mcp__livecanvas__lc_html_template_scan',
 	'mcp__livecanvas__lc_html_template_read',
 	'mcp__livecanvas__lc_html_template_assets',

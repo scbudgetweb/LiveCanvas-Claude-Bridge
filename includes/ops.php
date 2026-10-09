@@ -49,6 +49,8 @@ function lccb_ops_dispatch( $command, array $args ) {
 		'media_update'    => 'lccb_op_media_update',
 		'stock_search'    => 'lccb_op_stock_search',
 		'stock_import'    => 'lccb_op_stock_import',
+		'qa'              => 'lccb_op_qa',
+		'qa_targets'      => 'lccb_op_qa_targets',
 		'sections_list'   => 'lccb_op_sections_list',
 		'section_read'    => 'lccb_op_section_read',
 		'section_usage'   => 'lccb_op_section_usage',
