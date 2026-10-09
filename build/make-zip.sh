@@ -18,7 +18,7 @@ echo "› Building $SLUG $VERSION"
 # 2. Stage a copy and prune it to production deps.
 mkdir -p "$STAGE/$SLUG"
 rsync -a \
-	--exclude '/.git' --exclude '/dist' --exclude '/build' --exclude '.DS_Store' \
+	--exclude '/.git' --exclude '/dist' --exclude '/build' --exclude '/docs' --exclude '.DS_Store' \
 	--exclude '/mcp-server' --exclude '/terminal-daemon' \
 	"$PLUGIN_DIR/" "$STAGE/$SLUG/"
 (cd "$STAGE/$SLUG/runtime" && npm prune --omit=dev --no-audit --no-fund >/dev/null)

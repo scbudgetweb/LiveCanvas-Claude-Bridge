@@ -254,6 +254,9 @@
 .lccb-chat-md blockquote { padding-left: 10px; border-left: 3px solid var(--lccb-border); color: var(--lccb-muted); }
 .lccb-chat-md code { padding: 1px 5px; border-radius: 4px; background: rgba(255, 255, 255, 0.08); font: 12px Menlo, Monaco, monospace; }
 .lccb-chat-md table { border-collapse: collapse; font-size: 12px; }
+/* LiveCanvas's editor styles table cells for its own panels: keep chat tables readable. */
+#lc-claude-chat .lccb-chat-md table, #lc-claude-chat .lccb-chat-md th, #lc-claude-chat .lccb-chat-md td { color: inherit; background: transparent; }
+#lc-claude-chat .lccb-chat-md th { color: #fff; font-weight: 600; }
 .lccb-chat-md th, .lccb-chat-md td { padding: 4px 8px; border: 1px solid var(--lccb-border); text-align: left; }
 
 /* Code blocks (Markdown and tool views) */
@@ -642,3 +645,18 @@ a.lccb-chat-btn { display: inline-flex; align-items: center; text-decoration: no
 .lccb-chat-cmd em { color: var(--lccb-muted); font-style: normal; font-size: 11.5px; white-space: nowrap; }
 .lccb-chat-cmd span { color: var(--lccb-muted); font-size: 11.5px; margin-left: auto; text-align: right; }
 .lccb-chat-cmd.is-sel, .lccb-chat-cmd:hover { background: rgba(255, 255, 255, 0.08); }
+
+/* ───────── Narrow panels (split beside, floating window): keep the top bar on one tidy line ───────── */
+#lc-claude-chat { container-type: inline-size; container-name: lccb-chat; }
+.lccb-chat-btn, .lccb-chat-select, .lccb-chat-ctx { white-space: nowrap; flex: 0 0 auto; }
+.lccb-chat-bar-left, .lccb-chat-bar-right { flex: 0 0 auto; }
+@container lccb-chat (max-width: 820px) {
+	.lccb-chat-cache { display: none; }
+	.lccb-chat-ctx-text { display: none; }
+	.lccb-chat-bar-left, .lccb-chat-bar-right { gap: 5px; }
+	.lccb-chat-btn, .lccb-chat-select { padding: 0 7px; }
+}
+@container lccb-chat (max-width: 560px) {
+	.lccb-chat-bar { flex-wrap: wrap; row-gap: 6px; }
+	.lccb-chat-bar-mid { order: 3; flex-basis: 100%; justify-content: flex-start; }
+}

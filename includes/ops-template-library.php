@@ -153,7 +153,7 @@ function lccb_tpl_library_all( $refresh = false ) {
 			}
 			continue;
 		}
-		// Its sub-folders and zips that are templates; if there's only one (or none), maybe the folder itself is one.
+		// Its sub-folders and zips that are templates; if there are none, maybe the folder itself is one.
 		$kids = array();
 		foreach ( (array) @scandir( $d ) as $it ) {
 			if ( '' === $it || '.' === $it[0] || in_array( strtolower( $it ), array( 'node_modules', 'vendor', 'library', 'documentation', 'docs' ), true ) ) {
@@ -172,7 +172,7 @@ function lccb_tpl_library_all( $refresh = false ) {
 				}
 			}
 		}
-		$self = count( $kids ) < 2 ? lccb_tpl_lib_probe_dir( $d ) : null;
+		$self = $kids ? null : lccb_tpl_lib_probe_dir( $d ); // template sub-folders win; otherwise maybe the folder itself is one
 		if ( $self && substr_count( substr( $self, strlen( $d ) ), '/' ) <= 1 ) {
 			$add( $d, 'folder', $self, $count( $self ) );
 			continue;

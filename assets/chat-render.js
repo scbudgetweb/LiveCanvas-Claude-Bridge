@@ -293,7 +293,10 @@
 		// Screenshots from lc_screenshot: show the image Claude saw.
 		const images = Array.isArray(content) ? content.filter((c) => c.type === "image" && c.source && c.source.data) : [];
 		images.forEach((img) => wrap.append(h("img", { class: "lccb-chat-result-img", src: `data:${img.source.media_type};base64,${img.source.data}`, alt: "Screenshot" })));
-		const text = resultText(Array.isArray(content) ? content.filter((c) => c.type !== "image") : content).replace(/\s+$/, "");
+		// Claude Code adds a "[Image: source: <temp file>]" line for each image it saved: the image itself is shown above.
+		const text = resultText(Array.isArray(content) ? content.filter((c) => c.type !== "image") : content)
+			.replace(/^\[Image: source: [^\]\n]+\]\s*$/gm, "")
+			.replace(/^\s+|\s+$/g, "");
 		if (!text && !images.length) return null;
 		if (text) {
 			// Previews from the site tools carry a ```diff block: colour it.
