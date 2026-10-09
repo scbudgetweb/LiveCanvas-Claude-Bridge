@@ -19,6 +19,7 @@ Unofficial WordPress plugin that connects the [LiveCanvas](https://livecanvas.co
   - Stop a reply with the Stop button or Esc.
   - Pick the model and permission mode.
   - Images: paste, drag and drop, 📎, or 📷 to capture the LiveCanvas preview (the visible area, the whole page, or a pixel-exact Chrome capture).
+  - **Point at it:** turn on Ask mode (⌖) and click an element in the preview, or drag a box around an area, or Alt+click at any time. Claude gets a cropped screenshot, the element's builder selector and its rendered HTML, so "make this tighter on mobile" just works.
   - History: resume any earlier conversation for the site, including ones started in VS Code or a terminal.
   - A context meter, a prompt-cache countdown, per-reply token and cache stats, and your plan's 5-hour and weekly usage.
 - **CC Terminal tab:** the full, interactive Claude Code terminal, next to Global JS. The session keeps running when you reload the page.
@@ -31,6 +32,9 @@ Unofficial WordPress plugin that connects the [LiveCanvas](https://livecanvas.co
   - `lc_site_context`: versions, theme and Picostrap design tokens, the site's own class and custom-property conventions, pages, header and footer, templates and menus, in one call, even without the builder open.
   - `lc_screenshot`: Claude screenshots the preview at any width (e.g. 412px for mobile) to check its own work.
   - `lc_inspect`: rendered HTML, computed styles and the CSS rules that actually match, including shortcode and plugin output such as Forminator forms.
+- **Claude checks its own work:**
+  - `lc_responsive_check`: renders the page at 390, 768, 1200 and 1440px and runs layout detectors: sideways scrolling and its cause, elements wider than the screen, overlapping text, small tap targets (WCAG 2.5.8 and a 44px touch target on phones), text under 12px, images overflowing or missing their size, and clipped content. It returns one side-by-side image with the problems outlined and numbered.
+  - `lc_lint`: checks the selection, a page or the whole site against the site's own design system: inline styles (with the Bootstrap utility that does the same), colours that aren't your tokens (with the matching `var()`), spacing off Bootstrap's scale, heading order, missing alt text and image sizes, empty links, duplicate ids, and classes that are defined nowhere (typos).
   - **An auto-generated site brief** in the site's `CLAUDE.md` (a managed block that never touches your own notes), so every Claude Code session starts out knowing the stack.
 - **Site building, with preview then apply:** Claude can work on the rest of the site, even without the builder open:
   - pages: list, read, create drafts, update, move to the bin, open in the builder

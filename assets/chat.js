@@ -185,9 +185,12 @@
 				const bubble = h("div", { class: "lccb-chat-msg is-user" });
 				if (e.images && e.images.length) {
 					bubble.append(h("div", { class: "lccb-chat-user-images" },
-						...e.images.map((img) => img.thumb
-							? h("img", { src: img.thumb, alt: "Attached image", title: `${img.width || "?"}×${img.height || "?"} · ${R.fmtTokens(img.bytes || 0)}B` })
-							: h("span", { class: "lccb-chat-attach", text: "🖼 image" }))));
+						...e.images.map((img) => {
+							const pic = img.thumb
+								? h("img", { src: img.thumb, alt: img.pointer || "Attached image", title: img.pointer || `${img.width || "?"}×${img.height || "?"} · ${R.fmtTokens(img.bytes || 0)}B` })
+								: h("span", { class: "lccb-chat-attach", text: "🖼 image" });
+							return img.pointer ? h("figure", { class: "lccb-chat-pointed" }, pic, h("figcaption", { text: "👉 " + img.pointer })) : pic;
+						})));
 				}
 				if (e.text) bubble.append(h("div", { class: "lccb-chat-user-text", text: e.text }));
 				if (e._ts) {
@@ -675,12 +678,14 @@
 			text,
 			images: attachments.map((a) => ({ media_type: a.media_type, data: a.data })),
 			thumbs: attachments.map((a) => ({ thumb: a.thumb, width: a.width, height: a.height, bytes: a.bytes })),
+			pointers: attachments.map((a) => a.pointer || null),
 		});
 		if (ok) {
 			els.input.value = "";
 			attachments = [];
 			renderAttachments();
 			autosize();
+			if (window.lccbPoint && window.lccbPoint.active()) window.lccbPoint.stop();
 		}
 	}
 
@@ -722,9 +727,50 @@
 		els.attachRow.textContent = "";
 		els.attachRow.hidden = !attachments.length;
 		attachments.forEach((a, i) => {
-			els.attachRow.append(h("div", { class: "lccb-chat-thumb", title: `${a.name} · ${a.width}×${a.height} · ${R.fmtTokens(a.bytes)}B` },
-				h("img", { src: a.thumb, alt: a.name }),
-				h("button", { type: "button", class: "lccb-chat-thumb-x", "aria-label": "Remove image", onclick: () => { attachments.splice(i, 1); renderAttachments(); } }, "×")));
+			const p = a.pointer;
+			const title = p ? pointerLabel(p) + (p.doc_selector ? `\n${p.doc_selector}` : "") : `${a.name} · ${a.width}×${a.height} · ${R.fmtTokens(a.bytes)}B`;
+			els.attachRow.append(h("div", { class: "lccb-chat-thumb" + (p ? " is-pointer" : ""), title },
+				h("img", { src: a.thumb, alt: p ? pointerLabel(p) : a.name }),
+				p ? h("span", { class: "lccb-chat-thumb-tag", text: pointerLabel(p) }) : null,
+				h("button", { type: "button", class: "lccb-chat-thumb-x", "aria-label": "Remove", onclick: () => { attachments.splice(i, 1); renderAttachments(); } }, "×")));
+		});
+	}
+
+	function pointerLabel(p) {
+		if (p.kind === "region") return "Region " + p.box.split(" ")[0];
+		const cls = p.classes ? "." + p.classes.split(/\s+/).slice(0, 2).join(".") : "";
+		return p.tag + cls;
+	}
+
+	// ───────────────────────── Ask mode (point at it) ─────────────────────────
+
+	function addPointed(promise) {
+		addImage(promise.then((r) => ({ ...r.image, pointer: r.pointer })), "Capturing what you pointed at…");
+	}
+
+	function toggleAsk(force) {
+		const P = window.lccbPoint;
+		if (!P) return flash("Ask mode isn't available (assets/chat-point.js didn't load).");
+		const next = typeof force === "boolean" ? force : !P.active();
+		if (next) P.start(addPointed);
+		else P.stop();
+	}
+
+	function watchPointer(tries = 0) {
+		const P = window.lccbPoint;
+		if (!P) { if (tries < 40) setTimeout(() => watchPointer(tries + 1), 250); return; }
+		P.onChange((on) => {
+			els.askBtn.classList.toggle("is-on", on);
+			els.askBtn.setAttribute("aria-pressed", on ? "true" : "false");
+			flash(on ? "Ask mode: click an element in the preview, or drag a box around an area. Esc to stop." : "");
+		});
+		// Alt+click anywhere in the preview attaches that element, even with Ask mode off.
+		P.onAltPick((promise) => {
+			if (document.getElementById(PANEL_ID).hidden) {
+				if (!window.jQuery("#lc-code-editor-window").is(":visible") && typeof window.openMainHtmlCodeEditor === "function") window.openMainHtmlCodeEditor();
+				showTab();
+			}
+			addPointed(promise);
 		});
 	}
 
@@ -786,6 +832,7 @@
 		const tools = h("div", { class: "lccb-chat-composer-tools" },
 			h("button", { type: "button", class: "lccb-chat-icon-btn", title: "Attach images (or paste / drop them)", onclick: () => fileInput.click() }, h("span", { class: "fa fa-paperclip" })),
 			h("button", { type: "button", class: "lccb-chat-icon-btn lccb-chat-cam", title: "Screenshot the preview", onclick: () => { menu.hidden = !menu.hidden; } }, h("span", { class: "fa fa-camera" })),
+			els.askBtn = h("button", { type: "button", class: "lccb-chat-icon-btn lccb-chat-ask", title: "Ask about something on the page: click an element or drag a box in the preview (Alt+click works any time)", "aria-pressed": "false", onclick: () => toggleAsk() }, h("span", { class: "fa fa-crosshairs" })),
 			menu, fileInput);
 
 		els.input.addEventListener("paste", (ev) => {
@@ -796,6 +843,7 @@
 		els.input.addEventListener("input", autosize);
 		els.input.addEventListener("keydown", (ev) => {
 			if (ev.key === "Enter" && !ev.shiftKey && !ev.isComposing) { ev.preventDefault(); submit(); }
+			else if (ev.key === "Escape" && window.lccbPoint && window.lccbPoint.active()) { ev.preventDefault(); toggleAsk(false); }
 			else if (ev.key === "Escape" && st.busy) { ev.preventDefault(); send({ t: "interrupt" }); }
 		});
 
@@ -821,6 +869,7 @@
 		["keydown", "keyup", "keypress"].forEach((type) => panel.addEventListener(type, (e) => e.stopPropagation()));
 		resetLog();
 		watchCheckpoints();
+		watchPointer();
 		return panel;
 	}
 
@@ -861,6 +910,7 @@
 	function hideTab() {
 		const panel = document.getElementById(PANEL_ID);
 		if (panel) panel.hidden = true;
+		if (window.lccbPoint && window.lccbPoint.active()) window.lccbPoint.stop();
 		document.getElementById("lc-code-editor-window").classList.remove("lccb-chat-active");
 	}
 

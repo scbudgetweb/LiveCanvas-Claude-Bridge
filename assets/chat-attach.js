@@ -156,12 +156,16 @@
 
 	/** Capture just one rendered element of the preview (CSS selector in the preview document). */
 	async function captureElement(selector) {
-		if (!window.modernScreenshot) throw new Error("Screenshot library missing (assets/vendor/modern-screenshot.js).");
-		const iframe = previewFrame();
-		const doc = iframe.contentDocument;
-		const el = doc.querySelector(selector);
+		const el = previewFrame().contentDocument.querySelector(selector);
 		if (!el) throw new Error(`Nothing in the preview matches "${selector}".`);
-		const win = iframe.contentWindow;
+		return captureNode(el, "element.png");
+	}
+
+	/** Capture a rendered element of the preview. */
+	async function captureNode(el, name) {
+		if (!window.modernScreenshot) throw new Error("Screenshot library missing (assets/vendor/modern-screenshot.js).");
+		const doc = el.ownerDocument;
+		const win = doc.defaultView;
 		let bg = win.getComputedStyle(el).backgroundColor;
 		if (!bg || bg === "rgba(0, 0, 0, 0)") bg = win.getComputedStyle(doc.body).backgroundColor;
 		const canvas = await window.modernScreenshot.domToCanvas(el, {
@@ -169,8 +173,36 @@
 			backgroundColor: bg && bg !== "rgba(0, 0, 0, 0)" ? bg : "#ffffff",
 			timeout: 15000,
 		});
-		return prepareCanvas(canvas, "element.png", true);
+		return prepareCanvas(canvas, name || "element.png", true);
 	}
 
-	window.lccbChatAttach = { fromBlob, capturePreview, captureElement, captureExact, MAX_EDGE };
+	/** Render the preview page from the top down to `height` px at the current width (LiveCanvas chrome filtered out). */
+	async function renderPage(height) {
+		if (!window.modernScreenshot) throw new Error("Screenshot library missing (assets/vendor/modern-screenshot.js).");
+		const iframe = previewFrame();
+		const doc = iframe.contentDocument;
+		const win = iframe.contentWindow;
+		const fullH = Math.max(doc.documentElement.scrollHeight, doc.body ? doc.body.scrollHeight : 0);
+		const bg = win.getComputedStyle(doc.body || doc.documentElement).backgroundColor;
+		return window.modernScreenshot.domToCanvas(doc.documentElement, {
+			width: iframe.clientWidth,
+			height: Math.min(fullH, height, 12000),
+			scale: 1,
+			backgroundColor: bg && bg !== "rgba(0, 0, 0, 0)" ? bg : "#ffffff",
+			timeout: 15000,
+			filter: (node) => !(node.classList && (node.classList.contains("lc-contextual-menu") || node.id === "lc-interface")),
+		});
+	}
+
+	/** Capture a box of the preview, in page coordinates ({x, y, width, height}). */
+	async function captureRect(r) {
+		const full = await renderPage(Math.ceil(r.y + r.height));
+		const out = document.createElement("canvas");
+		out.width = Math.max(1, Math.round(r.width));
+		out.height = Math.max(1, Math.min(Math.round(r.height), full.height - Math.round(r.y)));
+		out.getContext("2d").drawImage(full, Math.round(r.x), Math.round(r.y), out.width, out.height, 0, 0, out.width, out.height);
+		return prepareCanvas(out, "pointed-region.png", true);
+	}
+
+	window.lccbChatAttach = { fromBlob, capturePreview, captureElement, captureNode, captureRect, renderPage, prepareCanvas, captureExact, MAX_EDGE };
 })();

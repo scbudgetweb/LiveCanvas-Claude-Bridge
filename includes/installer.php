@@ -20,6 +20,8 @@ define( 'LCCB_READONLY_TOOLS', array(
 	'mcp__livecanvas__lc_site_context',
 	'mcp__livecanvas__lc_screenshot',
 	'mcp__livecanvas__lc_inspect',
+	'mcp__livecanvas__lc_responsive_check',
+	'mcp__livecanvas__lc_lint',
 	// Site-level reads and previews (previews never write; lc_apply_change does, and still asks).
 	'mcp__livecanvas__lc_pages_list',
 	'mcp__livecanvas__lc_page_read',

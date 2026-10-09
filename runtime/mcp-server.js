@@ -78,7 +78,7 @@ function call(cmd, args = {}) {
 	if (!hub || hub.readyState !== 1) return Promise.reject(new Error(hubError || "Connecting to the LC Claude Bridge hub. Try again in a moment."));
 	const id = `m${++seq}`;
 	return new Promise((resolve, reject) => {
-		const limit = cmd === "screenshot" ? 65000 : cmd === "css_recompile" ? 125000 : TIMEOUT_MS;
+		const limit = cmd === "screenshot" ? 65000 : cmd === "css_recompile" || cmd === "responsive_check" ? 125000 : TIMEOUT_MS;
 		const timer = setTimeout(() => { pending.delete(id); reject(new Error(`No answer to '${cmd}' within ${limit / 1000}s`)); }, limit);
 		pending.set(id, { resolve, reject, timer });
 		hub.send(JSON.stringify({ id, cmd, args }));
@@ -233,6 +233,46 @@ tool(
 	},
 	"inspect"
 );
+
+// ───────────────────────── Checking the work: responsive check + design-system lint ─────────────────────────
+
+server.registerTool("lc_responsive_check", {
+	description: "Check the page open in the builder at several widths (default 390, 768, 1200, 1440): resizes the preview, runs layout detectors (sideways scroll and what causes it, elements wider than the viewport, overlapping text, tap targets under 44×44, text under 12px, images overflowing their container or without width/height, content cut off by overflow: hidden), and returns the issues grouped across widths plus ONE composite image with every width side by side and problems outlined (red = high, amber = medium, blue = low). Run it after visual or layout changes, before telling the user you're done, and fix the high ones. Use `selector` (rendered preview selector) to check one section closely.",
+	inputSchema: {
+		widths: z.array(z.number().int().min(320).max(2560)).max(6).optional().describe("Widths in CSS px. Default [390, 768, 1200, 1440]."),
+		selector: z.string().optional().describe("Check just this element of the rendered preview (e.g. '#scHero', 'main#lc-main > section:nth-of-type(3)'). Omit for the whole page."),
+		images: z.enum(["composite", "each", "none"]).optional().describe("composite (default): one side-by-side image; each: one image per width (sharper, more tokens); none: issues only"),
+		max_height: z.number().int().min(600).max(12000).optional().describe("Whole-page captures stop this far down (CSS px, default 2400). Detectors always check the whole page."),
+	},
+}, async (args) => {
+	const r = await call("responsive_check", args);
+	const content = (r.images || []).map((img) => ({ type: "image", data: img.data, mimeType: img.media_type }));
+	const { images, ...rest } = r;
+	rest.images = (images || []).map((img) => `${img.label}: ${img.width}×${img.height}px`);
+	content.push({ type: "text", text: JSON.stringify(rest, null, 2) });
+	return { content };
+});
+
+server.registerTool("lc_lint", {
+	description: "Lint against the site's own design system, with a suggested fix for each finding: inline styles (and the Bootstrap utility that does the same), hard-coded colours that aren't the site's tokens/custom properties (with the matching var()), spacing off Bootstrap's scale, heading order and h1 count, images without alt/width/height, empty or icon-only links, duplicate ids, and classes that aren't defined anywhere or used elsewhere (typos). scope: 'selection' = the element open in the builder's HTML editor (or `selector`); 'page' = the page open in the builder including unsaved changes, or a saved page/partial/template by `id`; 'site' = every LiveCanvas page, partial and template plus Global CSS (saved versions). Read-only.",
+	inputSchema: {
+		scope: z.enum(["selection", "page", "site"]).optional().describe("Default 'page'"),
+		selector: z.string().optional().describe("For scope 'selection': a builder selector (as from lc_get_context). Omit for the current selection."),
+		id: z.number().int().optional().describe("For scope 'page': lint this saved page/partial/template instead of the one open in the builder"),
+	},
+}, async ({ scope = "page", selector, id }) => {
+	if (scope === "site" || (scope === "page" && id)) return json(await wpRun("lint", { scope, id }));
+	let live;
+	try {
+		const ctx = await call("context", {});
+		const html = await call("read_html", { selector: scope === "selection" ? selector : "main#lc-main" });
+		const css = await call("read_css", {});
+		live = { html: html.html, css: css.css, label: scope === "selection" ? `selection ${html.selector} on "${ctx.post.title}"` : `open page "${ctx.post.title}" (#${ctx.post.id}, unsaved changes included)` };
+	} catch (err) {
+		throw new Error(`${err.message} To lint without the builder, use scope 'page' with an id, or scope 'site'.`);
+	}
+	return json(await wpRun("lint", { scope, ...live }));
+});
 
 // ───────────────────────── Site building: pages, header/footer, templates (preview → apply, audited) ─────────────────────────
 

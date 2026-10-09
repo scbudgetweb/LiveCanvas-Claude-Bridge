@@ -273,14 +273,54 @@ export function createChat({ loadConfig, log, notifyEditor = () => {} }) {
 		}
 	}
 
+	// "Point at it": chips from Ask mode / Alt+click arrive as an image plus a description of what was picked.
+	const clip = (v, n) => (typeof v === "string" ? v.slice(0, n) : v == null ? null : String(v).slice(0, n));
+
+	function pointerText(p, n) {
+		if (p.kind === "region") {
+			const lines = [`Image ${n}: a region the user dragged a box around in the preview, ${clip(p.box, 120)}, preview width ${p.viewport | 0}px.`];
+			for (const e of (Array.isArray(p.elements) ? p.elements : []).slice(0, 6)) {
+				lines.push(`  - <${clip(e.tag, 20)}${e.classes ? ` class="${clip(e.classes, 160)}"` : ""}>${e.text ? ` "${clip(e.text, 80)}"` : ""}: builder selector ${e.doc_selector ? "`" + clip(e.doc_selector, 300) + "`" : "(none: header, footer or shortcode output)"}, preview selector \`${clip(e.preview_selector, 300)}\``);
+			}
+			return lines.join("\n");
+		}
+		return [
+			`Image ${n}: the element the user pointed at, <${clip(p.tag, 20)}${p.classes ? ` class="${clip(p.classes, 200)}"` : ""}> (${clip(p.size, 20)} at preview width ${p.viewport | 0}px, ${clip(p.font, 80)}), in the ${clip(p.region, 40)}.`,
+			p.doc_selector
+				? `  Builder selector (use with lc_read_html / lc_edit_html): \`${clip(p.doc_selector, 300)}\``
+				: "  It isn't part of this page's editable HTML (header/footer partial, or shortcode/plugin output): use lc_inspect, or the partial tools for the header/footer.",
+			p.section_selector ? `  Its section: \`${clip(p.section_selector, 300)}\`${p.section_heading ? ` ("${clip(p.section_heading, 80)}")` : ""}` : null,
+			`  Preview selector (use with lc_inspect / lc_screenshot): \`${clip(p.preview_selector, 300)}\``,
+			p.text ? `  Text: "${clip(p.text, 160)}"` : null,
+			"  Rendered HTML:",
+			"```html",
+			clip(p.html, 3200),
+			"```",
+		].filter(Boolean).join("\n");
+	}
+
+	function pointerLabel(p) {
+		if (p.kind === "region") return "region " + clip(p.box, 12).split(" ")[0];
+		return clip(p.tag, 20) + (p.classes ? "." + clip(p.classes, 80).split(/\s+/).slice(0, 2).join(".") : "");
+	}
+
 	function onSend(s, msg) {
 		const text = String(msg.text || "").trim();
 		const images = validImages(msg.images);
 		if (!text && !images.length) return;
 		if (!s.proc) start(s);
 		const turnId = `t${Date.now().toString(36)}${(++seq).toString(36)}`;
-		const content = [...images, ...(text ? [{ type: "text", text }] : [])];
-		const saved = images.length ? saveToInbox(s.site, turnId, images) : [];
+		const pointers = (Array.isArray(msg.pointers) ? msg.pointers : []).slice(0, images.length).map((p) => (p && typeof p === "object" ? p : null));
+		const content = [...images];
+		if (pointers.some(Boolean)) {
+			const lines = ["[The user is pointing at something in the LiveCanvas preview. Their message refers to it.]"];
+			pointers.forEach((p, i) => { if (p) lines.push(pointerText(p, i + 1)); });
+			content.push({ type: "text", text: lines.join("\n\n") });
+		}
+		if (text) content.push({ type: "text", text });
+		// Pointer crops are context, not site images: only plain attachments go to the inbox.
+		const plain = images.filter((_, i) => !pointers[i]);
+		const saved = plain.length ? saveToInbox(s.site, turnId, plain) : [];
 		if (saved.length) {
 			content.push({ type: "text", text: `[Note from the LiveCanvas bridge: the image${saved.length > 1 ? "s" : ""} above ${saved.length > 1 ? "are" : "is"} also saved at ${saved.join(", ")}. To use ${saved.length > 1 ? "them" : "it"} on the site, add ${saved.length > 1 ? "them" : "it"} to the media library with lc_media_import {path}.]` });
 		}
@@ -291,7 +331,7 @@ export function createChat({ loadConfig, log, notifyEditor = () => {} }) {
 		}
 		write(s, { type: "user", message: { role: "user", content } });
 		s.awaitingUuid.push(turnId);
-		notifyEditor(s.site, { event: "turn", turnId, label: text.slice(0, 120) || "(image)", source: "chat" });
+		notifyEditor(s.site, { event: "turn", turnId, label: text.slice(0, 120) || (pointers.some(Boolean) ? "(pointed at the page)" : "(image)"), source: "chat" });
 		// Claude doesn't echo user turns; record one for the transcript (images as small placeholders).
 		const thumbs = Array.isArray(msg.thumbs) ? msg.thumbs : [];
 		emit(s, {
@@ -300,7 +340,7 @@ export function createChat({ loadConfig, log, notifyEditor = () => {} }) {
 				const t = thumbs[i] || {};
 				// Small JPEG data URLs only (the browser makes them ~160px); anything else is dropped.
 				const thumb = typeof t.thumb === "string" && t.thumb.startsWith("data:image/jpeg;base64,") && t.thumb.length < 80000 ? t.thumb : null;
-				return { media_type: img.source.media_type, bytes: Buffer.byteLength(img.source.data, "base64"), thumb, width: t.width | 0, height: t.height | 0 };
+				return { media_type: img.source.media_type, bytes: Buffer.byteLength(img.source.data, "base64"), thumb, width: t.width | 0, height: t.height | 0, pointer: pointers[i] ? pointerLabel(pointers[i]) : undefined };
 			}),
 		});
 		s.busy = true;
@@ -374,10 +414,13 @@ export function createChat({ loadConfig, log, notifyEditor = () => {} }) {
 		} finally { closeSync(fd); }
 	}
 
+	// Context blocks the bridge adds to a user turn (pointer details, notes) aren't what the user typed.
+	const isBridgeText = (t) => typeof t === "string" && (t.startsWith("[The user is pointing at") || t.startsWith("[Note from the LiveCanvas bridge"));
+
 	function userText(entry) {
 		if (!entry || entry.type !== "user" || entry.isMeta || entry.isSidechain) return "";
 		const c = entry.message && entry.message.content;
-		const text = typeof c === "string" ? c : Array.isArray(c) ? c.filter((b) => b.type === "text").map((b) => b.text).join("\n") : "";
+		const text = typeof c === "string" ? c : Array.isArray(c) ? c.filter((b) => b.type === "text" && !isBridgeText(b.text)).map((b) => b.text).join("\n") : "";
 		const t = text.trim();
 		// Slash-command plumbing and hook/system injections aren't something the user typed.
 		if (!t || t.startsWith("<command-") || t.startsWith("<local-command") || t.startsWith("<system-reminder") || t.startsWith("Caveat:")) return "";

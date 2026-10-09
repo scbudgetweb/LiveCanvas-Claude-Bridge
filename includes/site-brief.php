@@ -52,7 +52,9 @@ function lccb_site_brief_markdown() {
 	$out[] = '### How to work on it';
 	$out[] = '- Use the **livecanvas** MCP tools for builder content. Start with `lc_get_context` (what\'s open and selected), or `lc_site_context` for the whole site.';
 	$out[] = '- Read before editing (`lc_read_html` / `lc_read_css`) and prefer `lc_edit_*` (exact replacements) over rewriting.';
-	$out[] = '- After visual changes, check them with `lc_screenshot` (try a mobile width such as 412). Use `lc_inspect` to see rendered markup, computed styles and which CSS rules win, e.g. for shortcode or plugin output.';
+	$out[] = '- **Check your work before saying it\'s done:** after visual or layout changes run `lc_responsive_check` (390/768/1200/1440 with layout detectors and one composite image) and fix the high-severity issues; use `lc_screenshot` for a closer look. Use `lc_inspect` to see rendered markup, computed styles and which CSS rules win, e.g. for shortcode or plugin output.';
+	$out[] = '- Run `lc_lint` on what you built (scope `selection` or `page`) to catch inline styles, colours that aren\'t tokens, heading order, missing alt text and typo\'d classes.';
+	$out[] = '- When the user\'s message comes with *"the user is pointing at …"*, they clicked that element in the preview: use the builder selector it gives with `lc_read_html` / `lc_edit_html`.';
 	$out[] = '- Builder edits (`lc_edit_html`, `lc_edit_css`, …) are live in the preview but **not saved**. Only call `lc_save` when the user asks.';
 	$out[] = '- Site-level changes (pages, header/footer, templates, design tokens, media) are previewed first, and `lc_apply_change` writes them to the site **immediately**. They don\'t need `lc_save`, and the builder\'s Save or undo doesn\'t cover them. Undo them with `lc_audit_restore`.';
 	$out[] = '- If the user restores a checkpoint, re-read before editing again.';

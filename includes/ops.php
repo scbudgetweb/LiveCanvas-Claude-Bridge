@@ -31,6 +31,7 @@ function lccb_ops_dispatch( $command, array $args ) {
 		'tokens_update'   => 'lccb_op_tokens_update',
 		'media_list'      => 'lccb_op_media_list',
 		'media_import'    => 'lccb_op_media_import',
+		'lint'            => 'lccb_op_lint',
 	);
 	if ( ! isset( $ops[ $command ] ) ) {
 		throw new Exception( "Unknown command: $command" );

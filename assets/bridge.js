@@ -237,6 +237,47 @@
 			}
 		},
 
+		/**
+		 * Check the open page at several widths: resize the preview, run layout detectors, capture it, and return
+		 * the issues (grouped across widths) plus a composite image with the problems outlined.
+		 */
+		async responsive_check({ widths, selector, images = "composite", max_height = 2400 }) {
+			const A = window.lccbChatAttach;
+			if (!A) throw new Error("Screenshot support isn't loaded in the editor.");
+			const iframe = document.getElementById("previewiframe");
+			if (!iframe || !iframe.contentDocument) throw new Error("The LiveCanvas preview isn't available.");
+			const list = (Array.isArray(widths) && widths.length ? widths : [390, 768, 1200, 1440]).map((w) => Math.max(320, Math.min(2560, w | 0))).slice(0, 6);
+			if (selector && !iframe.contentDocument.querySelector(selector)) throw new Error(`Nothing in the preview matches "${selector}".`);
+			const prev = { width: iframe.style.width, scroll: iframe.contentWindow.scrollY };
+			const settle = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(r, 600))));
+			const runs = [];
+			try {
+				for (const w of list) {
+					iframe.style.width = w + "px";
+					iframe.contentWindow.scrollTo(0, 0);
+					await settle();
+					const pdoc = iframe.contentDocument;
+					const root = selector ? pdoc.querySelector(selector) : pdoc.body;
+					if (!root) throw new Error(`"${selector}" disappeared at ${w}px.`);
+					const found = detectLayoutIssues(pdoc, root);
+					let shot = null;
+					if (images !== "none") {
+						const origin = selector ? root.getBoundingClientRect() : { left: 0, top: 0 };
+						const canvas = selector
+							? await window.modernScreenshot.domToCanvas(root, { scale: 1, backgroundColor: "#ffffff", timeout: 15000 })
+							: await A.renderPage(max_height);
+						shot = { canvas, ox: origin.left, oy: origin.top + (selector ? iframe.contentWindow.scrollY : 0) };
+					}
+					runs.push({ width: w, viewport: iframe.clientWidth, found, shot });
+				}
+			} finally {
+				iframe.style.width = prev.width;
+				await settle();
+				iframe.contentWindow.scrollTo(0, prev.scroll);
+			}
+			return summariseResponsive(runs, images, selector);
+		},
+
 		/** Rendered-preview inspection: markup, box, computed styles, children, matching CSS rules. */
 		async inspect({ selector, depth = 1, all = false }) {
 			const iframe = document.getElementById("previewiframe");
@@ -330,6 +371,223 @@
 			n++;
 		});
 		return n;
+	}
+
+	// ───────────────────────── Responsive check ─────────────────────────
+
+	const SEVERITY = { overflow: "high", too_wide: "high", text_overlap: "high", small_text: "medium", tap_target: "medium", tap_target_touch: "low", image_overflow: "medium", image_no_size: "low", clipped: "low" };
+	const ISSUE_TEXT = {
+		overflow: "pushes past the right edge (the page scrolls sideways)",
+		too_wide: "is wider than the viewport",
+		text_overlap: "text overlaps other text",
+		small_text: "text is smaller than 12px",
+		tap_target: "tap target is under the 24×24 minimum (WCAG 2.5.8)",
+		tap_target_touch: "tap target is under 44×44 on a phone (hard to hit with a thumb)",
+		image_overflow: "image is wider than its container",
+		image_no_size: "image has no width/height attributes (layout shift while it loads)",
+		clipped: "content is cut off by overflow: hidden",
+	};
+	const PER_TYPE = 12;
+
+	function selectorFor(el) {
+		if (window.lccbPoint && window.lccbPoint.selectorFor) return window.lccbPoint.selectorFor(el);
+		if (el.id) return "#" + el.id;
+		const cls = typeof el.className === "string" ? el.className.trim().split(/\s+/)[0] : "";
+		return el.tagName.toLowerCase() + (cls ? "." + cls : "");
+	}
+
+	function visible(el, win) {
+		const r = el.getBoundingClientRect();
+		if (r.width < 1 || r.height < 1) return false;
+		const cs = win.getComputedStyle(el);
+		return cs.visibility !== "hidden" && cs.opacity !== "0";
+	}
+
+	/** The line boxes of an element's own (direct) text: wrapped inline text gives one rect per line, not a union. */
+	function ownTextRects(el, pdoc) {
+		const rects = [];
+		for (const n of el.childNodes) {
+			if (n.nodeType !== 3 || !n.textContent.trim()) continue;
+			const range = pdoc.createRange();
+			range.selectNodeContents(n);
+			for (const r of range.getClientRects()) if (r.width >= 1 && r.height >= 1) rects.push({ left: r.left, top: r.top, right: r.right, bottom: r.bottom });
+		}
+		return rects;
+	}
+
+	function unionRect(rects) {
+		return rects.reduce((b, r) => ({ left: Math.min(b.left, r.left), top: Math.min(b.top, r.top), right: Math.max(b.right, r.right), bottom: Math.max(b.bottom, r.bottom) }));
+	}
+
+	/** How much two line boxes overlap, as a fraction of the smaller one. */
+	function overlapFraction(a, b) {
+		const w = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+		const hgt = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+		if (w < 4 || hgt < 4) return 0;
+		return (w * hgt) / Math.min((a.right - a.left) * (a.bottom - a.top), (b.right - b.left) * (b.bottom - b.top));
+	}
+
+	// Things that deliberately overflow or clip (carousels, sliders, marquees, LiveCanvas UI).
+	const INTENTIONAL = ".swiper, .swiper-wrapper, .carousel, .carousel-inner, .owl-carousel, .owl-stage, .splide, .slick-slider, .glide, .marquee, .lc-contextual-menu, #lc-interface, .offcanvas, .dropdown-menu, .modal, [aria-hidden='true']";
+
+	function detectLayoutIssues(pdoc, root) {
+		const win = pdoc.defaultView;
+		const vw = pdoc.documentElement.clientWidth;
+		const sy = win.scrollY;
+		const issues = [];
+		const add = (type, el, detail, rect) => {
+			if (issues.filter((i) => i.type === type).length >= PER_TYPE) return;
+			const r = rect || el.getBoundingClientRect();
+			issues.push({ type, selector: selectorFor(el), detail, box: { x: Math.round(r.left), y: Math.round(r.top + sy), w: Math.round(r.right - r.left), h: Math.round(r.bottom - r.top) } });
+		};
+		const all = [root, ...root.querySelectorAll("*")].filter((el) => !/^(script|style|template|noscript|br|svg|path|g|defs|use)$/i.test(el.tagName) && !el.closest(INTENTIONAL));
+
+		// Horizontal overflow: report the outermost offenders only.
+		const pageOverflows = pdoc.documentElement.scrollWidth > vw + 1;
+		const offenders = all.filter((el) => { const r = el.getBoundingClientRect(); return r.width > 0 && (r.right > vw + 1 || r.left < -1) && visible(el, win); });
+		const outer = offenders.filter((el) => !offenders.some((o) => o !== el && o.contains(el)));
+		for (const el of outer) {
+			const r = el.getBoundingClientRect();
+			if (r.width > vw + 1) add("too_wide", el, `${Math.round(r.width)}px wide in a ${vw}px viewport`);
+			else if (pageOverflows) add("overflow", el, `reaches x ${Math.round(r.right)} in a ${vw}px viewport`);
+		}
+		if (pageOverflows && !outer.length) issues.push({ type: "overflow", selector: "html", detail: `page is ${pdoc.documentElement.scrollWidth}px wide in a ${vw}px viewport`, box: null });
+
+		// Text: size and overlaps.
+		const texts = [];
+		for (const el of all) {
+			const rects = ownTextRects(el, pdoc);
+			if (!rects.length || !visible(el, win)) continue;
+			const fs = parseFloat(win.getComputedStyle(el).fontSize);
+			if (fs < 12) add("small_text", el, `${fs}px: "${el.textContent.trim().replace(/\s+/g, " ").slice(0, 40)}"`, unionRect(rects));
+			if (texts.length < 600) texts.push({ el, rects, box: unionRect(rects) });
+		}
+		for (let i = 0; i < texts.length; i++) {
+			for (let j = i + 1; j < texts.length; j++) {
+				const a = texts[i], b = texts[j];
+				if (overlapFraction(a.box, b.box) === 0 || a.el.contains(b.el) || b.el.contains(a.el)) continue;
+				const hit = a.rects.some((ra) => b.rects.some((rb) => overlapFraction(ra, rb) > 0.25));
+				if (hit) add("text_overlap", a.el, `overlaps ${selectorFor(b.el)} ("${b.el.textContent.trim().slice(0, 30)}")`, unionRect([a.box, b.box]));
+			}
+		}
+
+		// Tap targets: under WCAG 2.5.8's 24×24 minimum at any width, and under the 44×44 touch guideline on phones.
+		// Exempt, as in WCAG: inline links inside running text, and small targets with enough space around them
+		// (a 24px circle on each one's centre touches no other target or circle).
+		const phone = vw <= 480;
+		const targets = [...root.querySelectorAll("a[href], button, input:not([type=hidden]), select, textarea, [role=button]")]
+			.filter((el) => !el.closest(INTENTIONAL) && visible(el, win))
+			.map((el) => { const r = el.getBoundingClientRect(); return { el, r, cx: (r.left + r.right) / 2, cy: (r.top + r.bottom) / 2, min: Math.min(r.width, r.height) }; });
+		const distToRect = (x, y, r) => Math.hypot(Math.max(r.left - x, 0, x - r.right), Math.max(r.top - y, 0, y - r.bottom));
+		const spaced = (t) => targets.every((o) => o === t || o.el.contains(t.el) || t.el.contains(o.el) ||
+			(distToRect(t.cx, t.cy, o.r) >= 12 && (o.min >= 24 || Math.hypot(t.cx - o.cx, t.cy - o.cy) >= 24)));
+		for (const t of targets) {
+			if (t.min >= 44 || (t.min >= 24 && !phone)) continue;
+			const cs = win.getComputedStyle(t.el);
+			const parentText = t.el.parentElement ? (t.el.parentElement.textContent || "").trim().length : 0;
+			if (cs.display === "inline" && parentText > (t.el.textContent || "").trim().length + 20) continue;
+			if (t.min < 24 && spaced(t)) { if (phone) add("tap_target_touch", t.el, `${Math.round(t.r.width)}×${Math.round(t.r.height)} (spaced out, so it passes the 24px minimum)`); continue; }
+			add(t.min < 24 ? "tap_target" : "tap_target_touch", t.el, `${Math.round(t.r.width)}×${Math.round(t.r.height)}`);
+		}
+
+		// Images.
+		for (const img of root.querySelectorAll("img")) {
+			if (img.closest(INTENTIONAL) || !visible(img, win)) continue;
+			const r = img.getBoundingClientRect();
+			const parent = img.parentElement;
+			if (parent && r.width > parent.clientWidth + 1 && parent.clientWidth > 0) add("image_overflow", img, `${Math.round(r.width)}px in a ${parent.clientWidth}px container`);
+			if (!img.getAttribute("width") || !img.getAttribute("height")) add("image_no_size", img, (img.getAttribute("src") || "").split("/").pop().slice(0, 60));
+		}
+
+		// Content clipped by overflow: hidden.
+		for (const el of all) {
+			const cs = win.getComputedStyle(el);
+			if (!/hidden|clip/.test(cs.overflowX + cs.overflowY) || cs.textOverflow === "ellipsis" || el === pdoc.body) continue;
+			if (/^(img|video|iframe|picture|input|textarea|select)$/i.test(el.tagName) || !visible(el, win)) continue;
+			if (el.closest(".visually-hidden, .visually-hidden-focusable, .sr-only, .screen-reader-text") || el.clientWidth <= 2 || el.clientHeight <= 2) continue;
+			const cutX = /hidden|clip/.test(cs.overflowX) && el.scrollWidth > el.clientWidth + 2;
+			const cutY = /hidden|clip/.test(cs.overflowY) && el.scrollHeight > el.clientHeight + 2;
+			if ((cutX || cutY) && (el.textContent || "").trim()) add("clipped", el, `${cutX ? `${el.scrollWidth - el.clientWidth}px wider` : ""}${cutX && cutY ? ", " : ""}${cutY ? `${el.scrollHeight - el.clientHeight}px taller` : ""} than its box`);
+		}
+		return { viewport: vw, page_width: pdoc.documentElement.scrollWidth, page_height: pdoc.documentElement.scrollHeight, issues };
+	}
+
+	async function summariseResponsive(runs, images, selector) {
+		const A = window.lccbChatAttach;
+		// Group the same problem across widths.
+		const grouped = new Map();
+		runs.forEach((run) => run.found.issues.forEach((iss, k) => {
+			const key = iss.type + "|" + iss.selector;
+			if (!grouped.has(key)) grouped.set(key, { type: iss.type, severity: SEVERITY[iss.type], selector: iss.selector, problem: ISSUE_TEXT[iss.type], at: [] });
+			grouped.get(key).at.push({ width: run.width, detail: iss.detail });
+			iss.n = k + 1;
+		}));
+		const order = { high: 0, medium: 1, low: 2 };
+		const issues = [...grouped.values()].sort((a, b) => order[a.severity] - order[b.severity] || b.at.length - a.at.length);
+		const out = {
+			scope: selector || "whole page",
+			widths: runs.map((r) => ({ width: r.width, issues: r.found.issues.length, page_height: r.found.page_height, sideways_scroll: r.found.page_width > r.found.viewport })),
+			issues,
+			ok: !issues.some((i) => i.severity === "high"),
+			note: issues.length
+				? "Issue boxes are outlined in red and numbered per width in the image. Selectors are for the rendered preview (lc_inspect); map them to builder selectors with lc_get_context/lc_read_html before editing."
+				: "No layout problems detected. Still look at the image: detectors can't judge spacing or visual balance.",
+			images: [],
+		};
+		if (images === "none") return out;
+
+		const outline = (ctx, run, scale, dx, dy) => {
+			ctx.save();
+			ctx.lineWidth = 2;
+			ctx.font = "bold 12px -apple-system, Helvetica, sans-serif";
+			run.found.issues.forEach((iss) => {
+				if (!iss.box) return;
+				const x = dx + (iss.box.x - run.shot.ox) * scale, y = dy + (iss.box.y - run.shot.oy) * scale;
+				ctx.strokeStyle = SEVERITY[iss.type] === "high" ? "#e11d48" : SEVERITY[iss.type] === "medium" ? "#f59e0b" : "#3b82f6";
+				ctx.strokeRect(x, y, Math.max(4, iss.box.w * scale), Math.max(4, iss.box.h * scale));
+				ctx.fillStyle = ctx.strokeStyle;
+				ctx.fillRect(x, y - 14, 18, 14);
+				ctx.fillStyle = "#fff";
+				ctx.fillText(String(iss.n), x + 3, y - 3);
+			});
+			ctx.restore();
+		};
+
+		if (images === "each") {
+			for (const run of runs) {
+				const c = run.shot.canvas;
+				const ctx = c.getContext("2d");
+				outline(ctx, run, 1, 0, 0);
+				const img = await A.prepareCanvas(c, `responsive-${run.width}.png`, true);
+				out.images.push({ media_type: img.media_type, data: img.data, width: img.width, height: img.height, label: `${run.width}px` });
+			}
+			return out;
+		}
+
+		// Composite: one column per width, each scaled to the same column width, labelled.
+		const COL = 360, GAP = 16, HEAD = 26, MAX_H = 1500;
+		const cols = runs.map((run) => {
+			const scale = COL / run.shot.canvas.width;
+			return { run, scale, h: Math.min(MAX_H, Math.round(run.shot.canvas.height * scale)) };
+		});
+		const canvas = document.createElement("canvas");
+		canvas.width = cols.length * COL + (cols.length - 1) * GAP;
+		canvas.height = HEAD + Math.max(...cols.map((c) => c.h));
+		const ctx = canvas.getContext("2d");
+		ctx.fillStyle = "#f1f1f1";
+		ctx.fillRect(0, 0, canvas.width, canvas.height);
+		cols.forEach((c, i) => {
+			const x = i * (COL + GAP);
+			ctx.drawImage(c.run.shot.canvas, 0, 0, c.run.shot.canvas.width, c.h / c.scale, x, HEAD, COL, c.h);
+			outline(ctx, c.run, c.scale, x, HEAD);
+			ctx.fillStyle = c.run.found.issues.length ? "#9f1239" : "#166534";
+			ctx.font = "bold 14px -apple-system, Helvetica, sans-serif";
+			const n = c.run.found.issues.length;
+			ctx.fillText(`${c.run.width}px · ${n ? n + " issue" + (n > 1 ? "s" : "") : "no issues"}${c.run.shot.canvas.height * c.scale > MAX_H ? " · top of page" : ""}`, x + 2, 18);
+		});
+		const img = await A.prepareCanvas(canvas, "responsive-check.png", true);
+		out.images.push({ media_type: img.media_type, data: img.data, width: img.width, height: img.height, label: runs.map((r) => r.width + "px").join(" · ") });
+		return out;
 	}
 
 	// ───────────────────────── Inspect helpers ─────────────────────────

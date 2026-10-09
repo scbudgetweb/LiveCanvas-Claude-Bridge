@@ -43,6 +43,7 @@ add_action( 'lc_editor_header', function () {
 	<script defer src="<?php echo $src( 'terminal.js' ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in $src ?>"></script>
 	<script defer src="<?php echo $src( 'chat-render.js' ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in $src ?>"></script>
 	<script defer src="<?php echo $src( 'chat-attach.js' ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in $src ?>"></script>
+	<script defer src="<?php echo $src( 'chat-point.js' ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in $src ?>"></script>
 	<script defer src="<?php echo $src( 'chat.js' ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in $src ?>"></script>
 	<?php
 } );

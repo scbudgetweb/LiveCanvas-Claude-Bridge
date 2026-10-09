@@ -159,6 +159,8 @@
 		lc_site_context: ["Read site context", () => ""],
 		lc_screenshot: ["Screenshot", (i) => [i.area || "visible", i.width ? i.width + "px" : "", i.selector || ""].filter(Boolean).join(" · ")],
 		lc_inspect: ["Inspect", (i) => i.selector],
+		lc_responsive_check: ["Responsive check", (i) => [(i.widths || [390, 768, 1200, 1440]).join("/") + "px", i.selector || ""].filter(Boolean).join(" · ")],
+		lc_lint: ["Lint", (i) => [i.scope || "page", i.id ? "#" + i.id : i.selector || ""].filter(Boolean).join(" · ")],
 		lc_pages_list: ["List pages", (i) => i.search || i.status || ""],
 		lc_page_read: ["Read page", id],
 		lc_page_create: ["Preview new page", (i) => i.title, "preview"],
