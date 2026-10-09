@@ -15,11 +15,32 @@ function lccb_tpl_library_file() {
 	return lccb_support_dir() . '/templates.json';
 }
 
-/** @return string[] absolute folder (or zip) paths */
-function lccb_tpl_library_dirs() {
+function lccb_tpl_library_config() {
 	$f = lccb_tpl_library_file();
 	$j = is_file( $f ) ? json_decode( (string) file_get_contents( $f ), true ) : null;
-	return is_array( $j ) && isset( $j['dirs'] ) && is_array( $j['dirs'] ) ? array_values( array_filter( $j['dirs'], 'is_string' ) ) : array();
+	$j = is_array( $j ) ? $j : array();
+	foreach ( array( 'dirs', 'hidden' ) as $k ) {
+		$j[ $k ] = isset( $j[ $k ] ) && is_array( $j[ $k ] ) ? array_values( array_filter( $j[ $k ], 'is_string' ) ) : array();
+	}
+	return $j;
+}
+
+function lccb_tpl_library_write( array $config ) {
+	wp_mkdir_p( lccb_support_dir() );
+	file_put_contents( lccb_tpl_library_file(), wp_json_encode( array( 'dirs' => array_values( $config['dirs'] ), 'hidden' => array_values( array_unique( $config['hidden'] ) ) ), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) );
+	delete_transient( 'lccb_tpl_lib' );
+}
+
+/** @return string[] absolute folder (or zip) paths */
+function lccb_tpl_library_dirs() {
+	return lccb_tpl_library_config()['dirs'];
+}
+
+/** Hide one discovered template from Claude (or show it again). Its files are never touched. */
+function lccb_tpl_library_hide( $path, $hide ) {
+	$config = lccb_tpl_library_config();
+	$config['hidden'] = $hide ? array_merge( $config['hidden'], array( (string) $path ) ) : array_values( array_diff( $config['hidden'], array( (string) $path ) ) );
+	lccb_tpl_library_write( $config );
 }
 
 /** Validate and save. @return array{saved: string[], rejected: string[]} */
@@ -40,10 +61,9 @@ function lccb_tpl_library_save( array $paths ) {
 			$bad[] = $p;
 		}
 	}
-	$saved = array_values( array_unique( $saved ) );
-	wp_mkdir_p( lccb_support_dir() );
-	file_put_contents( lccb_tpl_library_file(), wp_json_encode( array( 'dirs' => $saved ), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) );
-	delete_transient( 'lccb_tpl_lib' );
+	$config         = lccb_tpl_library_config();
+	$config['dirs'] = array_values( array_unique( $saved ) );
+	lccb_tpl_library_write( $config );
 	return array( 'saved' => $saved, 'rejected' => $bad );
 }
 
@@ -88,11 +108,27 @@ function lccb_tpl_lib_zip_pages( $zip ) {
 	return $index && $n >= 2 && $php < $n ? $n : 0; // a PHP app isn't an HTML template
 }
 
-/**
- * Every template in the library: registered folders that are templates themselves, plus their sub-folders and zips
- * that are. Cached for 10 minutes.
- */
+/** Templates Claude can use: the library minus the ones the user removed. */
 function lccb_tpl_library( $refresh = false ) {
+	$hidden = array_flip( lccb_tpl_library_config()['hidden'] );
+	return array_values( array_filter( lccb_tpl_library_all( $refresh ), function ( $t ) use ( $hidden ) {
+		return ! isset( $hidden[ $t['path'] ] );
+	} ) );
+}
+
+/** Templates the user removed from the library (still on disk). */
+function lccb_tpl_library_removed() {
+	$hidden = array_flip( lccb_tpl_library_config()['hidden'] );
+	return array_values( array_filter( lccb_tpl_library_all(), function ( $t ) use ( $hidden ) {
+		return isset( $hidden[ $t['path'] ] );
+	} ) );
+}
+
+/**
+ * Every template found in the library folders: registered folders that are templates themselves, plus their
+ * sub-folders and zips that are. Cached for 10 minutes.
+ */
+function lccb_tpl_library_all( $refresh = false ) {
 	$dirs = lccb_tpl_library_dirs();
 	$key  = md5( wp_json_encode( $dirs ) );
 	$hit  = $refresh ? false : get_transient( 'lccb_tpl_lib' );

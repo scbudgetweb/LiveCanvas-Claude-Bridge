@@ -86,6 +86,21 @@ add_action( 'admin_post_lccb_templates', function () {
 	lccb_redirect_back( array( 'title' => 'Template library', 'ok' => ! $r['rejected'], 'steps' => $steps ) );
 } );
 
+add_action( 'admin_post_lccb_template_hide', function () {
+	lccb_guard( 'lccb_template_hide' );
+	$path = isset( $_POST['path'] ) ? (string) wp_unslash( $_POST['path'] ) : ''; // phpcs:ignore WordPress.Security.NonceVerification
+	$hide = ! empty( $_POST['hide'] ); // phpcs:ignore WordPress.Security.NonceVerification
+	$known = wp_list_pluck( lccb_tpl_library_all(), 'path' );
+	if ( in_array( $path, $known, true ) ) {
+		lccb_tpl_library_hide( $path, $hide );
+		if ( lccb_is_connected() ) {
+			lccb_write_site_brief();
+		}
+	}
+	wp_safe_redirect( admin_url( 'tools.php?page=' . LCCB_PAGE . '#lccb-templates' ) );
+	exit;
+} );
+
 add_action( 'admin_post_lccb_paths', function () {
 	lccb_guard( 'lccb_paths' );
 	$clean = function ( $key, $bin ) {
@@ -107,6 +122,19 @@ add_action( 'admin_post_lccb_paths', function () {
 	}
 	lccb_redirect_back( array( 'title' => 'Paths', 'ok' => null !== $node && null !== $claude, 'steps' => $steps ) );
 } );
+
+/** Remove / Restore button for one library template. */
+function lccb_template_hide_button( $path, $hide ) {
+	?>
+	<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="margin:0">
+		<input type="hidden" name="action" value="lccb_template_hide">
+		<input type="hidden" name="path" value="<?php echo esc_attr( $path ); ?>">
+		<input type="hidden" name="hide" value="<?php echo $hide ? '1' : ''; ?>">
+		<?php wp_nonce_field( 'lccb_template_hide' ); ?>
+		<button type="submit" class="button-link<?php echo $hide ? ' button-link-delete' : ''; ?>"><?php echo $hide ? 'Remove' : 'Restore'; ?></button>
+	</form>
+	<?php
+}
 
 /** @return array<array{ok: bool, label: string, detail?: string}> */
 function lccb_status_rows() {
@@ -228,23 +256,37 @@ function lccb_render_page() {
 		$lib_dir = array_map( $tidy, lccb_tpl_library_dirs() );
 		$lib     = $lib_dir ? lccb_tpl_library() : array();
 		?>
-		<h2 style="margin-top:32px">Template library</h2>
+		<h2 style="margin-top:32px" id="lccb-templates">Template library</h2>
 		<p style="max-width:760px">Folders where you keep HTML templates (bought or downloaded, as folders or .zip files). Claude then knows them by name: ask for <em>"the beauty-salon demo"</em> and it finds it, without searching your disk. One folder per line; a folder can be a template itself or hold several. Shared by every connected site on this Mac. Templates are only ever read.</p>
 		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="max-width:760px">
 			<input type="hidden" name="action" value="lccb_templates">
 			<?php wp_nonce_field( 'lccb_templates' ); ?>
-			<textarea name="template_dirs" rows="3" class="large-text code" placeholder="~/Templates&#10;~/Downloads"><?php echo esc_textarea( implode( "\n", $lib_dir ) ); ?></textarea>
+			<textarea name="template_dirs" rows="<?php echo (int) max( 3, count( $lib_dir ) + 1 ); ?>" class="large-text code" placeholder="~/Templates&#10;~/Downloads"><?php echo esc_textarea( implode( "\n", $lib_dir ) ); ?></textarea>
 			<p><?php submit_button( 'Save and scan', 'secondary', 'submit', false ); ?></p>
 		</form>
 		<?php if ( $lib ) : ?>
 			<table class="widefat striped" style="max-width:760px">
-				<thead><tr><th>Name Claude uses</th><th>Pages</th><th>Location</th></tr></thead>
+				<thead><tr><th>Name Claude uses</th><th>Pages</th><th>Location</th><th></th></tr></thead>
 				<tbody>
 				<?php foreach ( $lib as $t ) : ?>
-					<tr><td><code><?php echo esc_html( $t['name'] ); ?></code></td><td><?php echo (int) $t['pages']; ?></td><td><code><?php echo esc_html( $tidy( $t['path'] ) ); ?></code><?php echo 'zip' === $t['kind'] ? ' (zip)' : ''; ?></td></tr>
+					<tr><td><code><?php echo esc_html( $t['name'] ); ?></code></td><td><?php echo (int) $t['pages']; ?></td><td><code><?php echo esc_html( $tidy( $t['path'] ) ); ?></code><?php echo 'zip' === $t['kind'] ? ' (zip)' : ''; ?></td>
+						<td><?php lccb_template_hide_button( $t['path'], true ); ?></td></tr>
 				<?php endforeach; ?>
 				</tbody>
 			</table>
+		<?php endif; ?>
+		<?php $removed = $lib_dir ? lccb_tpl_library_removed() : array(); ?>
+		<?php if ( $removed ) : ?>
+			<details style="max-width:760px;margin-top:12px">
+				<summary style="cursor:pointer">Removed from the library (<?php echo count( $removed ); ?>): Claude doesn't see these; the files are untouched</summary>
+				<table class="widefat striped" style="margin-top:8px">
+					<tbody>
+					<?php foreach ( $removed as $t ) : ?>
+						<tr><td><code><?php echo esc_html( $t['name'] ); ?></code></td><td><code><?php echo esc_html( $tidy( $t['path'] ) ); ?></code></td><td><?php lccb_template_hide_button( $t['path'], false ); ?></td></tr>
+					<?php endforeach; ?>
+					</tbody>
+				</table>
+			</details>
 		<?php elseif ( $lib_dir ) : ?>
 			<p><em>No templates found in those folders (a template needs an index.html within a few folders of its top).</em></p>
 		<?php endif; ?>
