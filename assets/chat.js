@@ -420,6 +420,7 @@
 		els.usagePop.hidden = true;
 		els.historyPop.hidden = true;
 		els.cpPop.hidden = true;
+		els.activityPop.hidden = true;
 		if (open) { render(); pop.hidden = false; }
 	}
 
@@ -495,6 +496,56 @@
 			});
 		} else if (tries < 120) {
 			setTimeout(() => watchCheckpoints(tries + 1), 500);
+		}
+	}
+
+	// ───────────────────────── Activity (site-level changes, from the audit log) ─────────────────────────
+
+	const restBase = () => (window.lc_editor_rest_api_url || "/wp-json/").replace(/\/?$/, "/") + "lccb/v1/";
+	const restHeaders = () => ({ "X-WP-Nonce": window.lc_editor_rest_api_nonce || "", "Content-Type": "application/json" });
+
+	async function loadActivity() {
+		els.activityPop.textContent = "";
+		els.activityPop.append(h("div", { class: "lccb-chat-pop-title", text: "Site changes (pages, header/footer, templates, tokens, media)" }), h("div", { class: "lccb-chat-limit-note", text: "Loading…" }));
+		try {
+			const res = await fetch(restBase() + "activity?limit=20", { credentials: "same-origin", headers: restHeaders() });
+			if (!res.ok) throw new Error(`HTTP ${res.status}`);
+			renderActivity(await res.json());
+		} catch (err) {
+			els.activityPop.lastChild.textContent = "Couldn't load activity: " + err.message;
+		}
+	}
+
+	function renderActivity(items) {
+		els.activityPop.textContent = "";
+		els.activityPop.append(h("div", { class: "lccb-chat-pop-title", text: "Site changes (pages, header/footer, templates, tokens, media)" }));
+		if (!items.length) {
+			els.activityPop.append(h("div", { class: "lccb-chat-limit-note", text: "None yet. Changes Claude applies with lc_apply_change or lc_media_import appear here, each with Undo." }));
+			return;
+		}
+		const list = h("div", { class: "lccb-chat-history" });
+		items.forEach((it) => {
+			list.append(h("div", { class: "lccb-chat-cp-item" + (it.undone ? " is-undone" : "") },
+				h("div", { class: "lccb-chat-cp-text" },
+					h("span", { class: "lccb-chat-history-title", text: `#${it.id} ${it.action}: ${it.summary}` }),
+					h("span", { class: "lccb-chat-history-meta", text: [it.ago, it.target, it.undone ? "undone" : ""].filter(Boolean).join(" · ") })),
+				h("a", { class: "lccb-chat-btn", href: it.detail_url, target: "_blank", rel: "noopener", title: "Before/after in Tools › Claude Code › Activity" }, "Details"),
+				it.undone ? null : h("button", { type: "button", class: "lccb-chat-btn", onclick: () => undoActivity(it) }, "Undo")));
+		});
+		els.activityPop.append(list, h("div", { class: "lccb-chat-limit-note", text: "These are live on the site (not builder edits). Undo puts an item back exactly as it was before that change." }));
+	}
+
+	async function undoActivity(it) {
+		if (!confirm(`Undo #${it.id}: ${it.summary}?\n\nThe item goes back exactly as it was before this change. This is live on the site straight away, and can itself be undone from Activity.`)) return;
+		try {
+			const res = await fetch(restBase() + `activity/${it.id}/undo`, { method: "POST", credentials: "same-origin", headers: restHeaders(), body: "{}" });
+			const body = await res.json();
+			if (!res.ok) throw new Error(body && body.message ? body.message : `HTTP ${res.status}`);
+			if (body.refresh_preview_css && window.lccbBridge) window.lccbBridge.refreshCss();
+			send({ t: "site_note", text: `The user undid change #${it.id} (${it.summary}) from the Activity list.` });
+			loadActivity();
+		} catch (err) {
+			append(h("div", { class: "lccb-chat-meta is-warn", text: `Undo #${it.id} failed: ${err.message}` }));
 		}
 	}
 
@@ -706,6 +757,8 @@
 		els.cache = h("span", { class: "lccb-chat-cache", hidden: true });
 		els.usagePop = h("div", { class: "lccb-chat-pop lccb-chat-pop-usage", hidden: true });
 		els.cpPop = h("div", { class: "lccb-chat-pop lccb-chat-pop-history", hidden: true });
+		els.activityPop = h("div", { class: "lccb-chat-pop lccb-chat-pop-history", hidden: true });
+		const activityBtn = h("button", { type: "button", class: "lccb-chat-btn", title: "Site-level changes Claude applied (pages, header/footer, templates, tokens, media), with Undo", onclick: () => togglePop(els.activityPop, loadActivity) }, "Activity");
 		els.cpBtn = h("button", { type: "button", class: "lccb-chat-btn", hidden: true, title: "Roll the builder back to before one of Claude's replies", onclick: () => togglePop(els.cpPop, renderCheckpoints) }, "Checkpoints");
 		els.historyPop = h("div", { class: "lccb-chat-pop lccb-chat-pop-history", hidden: true });
 		document.addEventListener("click", (e) => {
@@ -713,6 +766,7 @@
 			els.usagePop.hidden = true;
 			els.historyPop.hidden = true;
 			els.cpPop.hidden = true;
+			els.activityPop.hidden = true;
 		});
 
 		els.log = h("div", { class: "lccb-chat-log" });
@@ -744,10 +798,10 @@
 
 		const panel = h("div", { id: PANEL_ID, role: "tabpanel", "aria-labelledby": TAB_ID, hidden: true },
 			h("div", { class: "lccb-chat-bar" },
-				h("div", { class: "lccb-chat-bar-left" }, els.dot, newBtn, historyBtn, els.cpBtn),
+				h("div", { class: "lccb-chat-bar-left" }, els.dot, newBtn, historyBtn, els.cpBtn, activityBtn),
 				h("div", { class: "lccb-chat-bar-mid" }, els.ctx, els.cache),
 				h("div", { class: "lccb-chat-bar-right" }, els.model, els.mode),
-				els.usagePop, els.historyPop, els.cpPop),
+				els.usagePop, els.historyPop, els.cpPop, els.activityPop),
 			els.notice,
 			els.log,
 			els.waiting,

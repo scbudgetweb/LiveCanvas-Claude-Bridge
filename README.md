@@ -45,7 +45,10 @@ Unofficial WordPress plugin that connects the [LiveCanvas](https://livecanvas.co
 - **Media library:**
   - `lc_media_import` adds images from a URL, or from images you drop into CC Chat (they're saved to a protected inbox Claude can reach), with alt text. It returns ready-to-use responsive `<img>` HTML.
   - Imports ask for your approval and can be undone.
-- **Change history with undo:** every applied site-level change is stored in an audit log with its before-copy. `lc_audit_restore` puts any of them back exactly, and restores are themselves undoable.
+- **Change history with undo:**
+  - Every applied site-level change is stored in an audit log with its before-copy.
+  - Browse it in **Tools › Claude Code › Activity**, where each change has a before/after diff, or from the **Activity** button in CC Chat.
+  - Undo any change with one click, or ask Claude (`lc_audit_restore`). Undos are themselves undoable, and Claude is told when you undo something.
 - **Rollback:** before Claude's first change in each reply, the plugin saves a checkpoint of the page HTML, Global CSS and Global JS. **"↺ Restore to before this"** on your messages puts everything back. It also rewinds files Claude edited, such as theme files, using Claude Code's own file checkpoints.
 - **Works across sites:** one shared background service on your Mac serves every connected site. Each site only ever reaches its own builder.
 

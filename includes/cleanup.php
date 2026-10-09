@@ -11,7 +11,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'LCCB_CLEANUP_PAGE', 'lc-claude-bridge' );
+define( 'LCCB_CLEANUP_PAGE', LCCB_PAGE );
 
 /** What this copy left in the site, so the notice can say what will be removed. */
 function lccb_leftovers() {

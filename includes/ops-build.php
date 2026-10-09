@@ -477,6 +477,9 @@ function lccb_op_audit_restore( array $args ) {
 		throw new Exception( 'The changed item no longer exists.' );
 	}
 	lccb_refuse_if_open( $target_id, ucfirst( $entry['target_type'] ) );
+	if ( null === $entry['before'] && 'trash' === $current['post']['post_status'] ) {
+		throw new Exception( "\"{$current['post']['post_title']}\" is already in the bin: that change has been undone." );
+	}
 	if ( null === $entry['before'] ) {
 		// That change created the item: restoring it means removing it again (to the bin, so it's recoverable).
 		return lccb_store_preview( 'lc_audit_restore', 'trash', $entry['target_type'], $target_id, "Undo #{$entry['id']}: move \"{$current['post']['post_title']}\" (created by that change) to the bin", $current, $current );

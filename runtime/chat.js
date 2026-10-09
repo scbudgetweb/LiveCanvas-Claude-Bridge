@@ -480,6 +480,14 @@ export function createChat({ loadConfig, log, notifyEditor = () => {} }) {
 					case "history": send(socket, { t: "history", items: listHistory(s) }); break;
 					case "resume": onResume(s, msg); break;
 					case "rewind_files": onRewindFiles(s, msg); break;
+					case "site_note": {
+						// The user undid a site-level change from the Activity popover: tell Claude next time.
+						const text = String(msg.text || "").slice(0, 500);
+						if (!text) break;
+						s.pendingNote = (s.pendingNote ? s.pendingNote + " " : "") + `[Note from the LiveCanvas bridge: ${text} Re-read before editing that item again.]`;
+						emit(s, { type: "hub", subtype: "note", text: text + " Claude will be told with your next message." });
+						break;
+					}
 				}
 			} catch (err) {
 				send(socket, { t: "error", message: err.message });

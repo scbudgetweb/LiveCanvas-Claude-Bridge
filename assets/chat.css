@@ -555,3 +555,7 @@
 .lccb-chat-result .lccb-chat-diff { margin: 6px 0; }
 .lccb-chat-tool[data-kind="preview"] .lccb-chat-tool-name { color: #e9a183; }
 .lccb-chat-tool[data-kind="apply"] .lccb-chat-tool-name { color: #fff; }
+
+/* Activity popover */
+.lccb-chat-cp-item.is-undone { opacity: 0.55; }
+a.lccb-chat-btn { display: inline-flex; align-items: center; text-decoration: none; }

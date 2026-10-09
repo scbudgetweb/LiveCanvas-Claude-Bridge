@@ -7,7 +7,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'LCCB_PAGE', 'lc-claude-bridge' );
 
 add_action( 'admin_menu', function () {
 	add_management_page( 'Claude Code', 'Claude Code', 'manage_options', LCCB_PAGE, 'lccb_render_page' );
@@ -134,7 +133,7 @@ function lccb_render_page() {
 	}
 	$result = get_transient( 'lccb_result_' . get_current_user_id() );
 	delete_transient( 'lccb_result_' . get_current_user_id() );
-	$rows      = lccb_status_rows();
+	$rows      = isset( $_GET['tab'] ) && 'activity' === $_GET['tab'] ? array() : lccb_status_rows(); // phpcs:ignore WordPress.Security.NonceVerification -- the checks shell out; skip them on the Activity tab
 	$connected = lccb_is_connected();
 	$all_ok    = ! in_array( false, wp_list_pluck( $rows, 'ok' ), true );
 	$settings  = lccb_settings();
@@ -155,6 +154,19 @@ function lccb_render_page() {
 					<?php endforeach; ?>
 				</ul>
 			</div>
+		<?php endif; ?>
+
+		<?php $tab = isset( $_GET['tab'] ) && 'activity' === $_GET['tab'] && $connected ? 'activity' : 'status'; // phpcs:ignore WordPress.Security.NonceVerification ?>
+		<?php if ( $connected ) : ?>
+			<nav class="nav-tab-wrapper" style="margin-bottom:12px">
+				<a class="nav-tab<?php echo 'status' === $tab ? ' nav-tab-active' : ''; ?>" href="<?php echo esc_url( admin_url( 'tools.php?page=' . LCCB_PAGE ) ); ?>">Status</a>
+				<a class="nav-tab<?php echo 'activity' === $tab ? ' nav-tab-active' : ''; ?>" href="<?php echo esc_url( admin_url( 'tools.php?page=' . LCCB_PAGE . '&tab=activity' ) ); ?>">Activity</a>
+			</nav>
+		<?php endif; ?>
+		<?php if ( 'activity' === $tab ) : ?>
+			<?php lccb_render_activity_tab(); ?>
+	</div>
+			<?php return; ?>
 		<?php endif; ?>
 
 		<h2>Status <?php echo $all_ok ? '<span style="color:#00a32a;font-size:14px">Ready</span>' : ''; ?></h2>

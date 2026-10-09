@@ -513,6 +513,8 @@
 		return { restored: true, parts };
 	}
 
+	window.lccbBridge = { refreshCss: refreshPreviewCss };
+
 	window.lccbCheckpoints = {
 		list: cpPublicList,
 		restore: cpRestore,
