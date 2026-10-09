@@ -6,6 +6,8 @@
 
 Unofficial WordPress plugin that connects the [LiveCanvas](https://livecanvas.com) page builder to [Claude Code](https://claude.com/claude-code) on your Mac. Chat with Claude, or use a full terminal, right inside the LiveCanvas code editor. Claude edits your page, Global CSS and Global JS live, with one-click rollback.
 
+![Pointing at a headline in the LiveCanvas preview and asking Claude to restyle it: Claude reads the page, edits the CSS and HTML, and the preview updates](docs/media/demo.gif)
+
 **Local development only.** The plugin refuses to run anywhere that isn't a local Mac install, so it's safe to leave in a site you later migrate (see [Safety](#safety)).
 
 > Not affiliated with, endorsed by or supported by Anthropic or LiveCanvas. "Claude" and "Claude Code" are trademarks of Anthropic. "LiveCanvas" is a trademark of its owners.
@@ -22,7 +24,18 @@ Unofficial WordPress plugin that connects the [LiveCanvas](https://livecanvas.co
   - **Point at it:** turn on Ask mode (⌖) and click an element in the preview, or drag a box around an area, or Alt+click at any time. Claude gets a cropped screenshot, the element's builder selector and its rendered HTML, so "make this tighter on mobile" just works.
   - History: resume any earlier conversation for the site, including ones started in VS Code or a terminal.
   - A context meter, a prompt-cache countdown, per-reply token and cache stats, and your plan's 5-hour and weekly usage.
+
+![CC Chat beside the LiveCanvas preview: Claude restyles a headline the user pointed at, with diffs of the CSS and HTML it changed](docs/media/builder-chat.jpg)
+<sub>CC Chat beside the preview: point at an element, ask, and see the CSS and HTML diffs as the page updates.</sub>
+
+![Ask mode: the headline is outlined in the preview and attached to the message as a chip](docs/media/ask-mode.jpg)
+<sub>Ask mode: click anything in the preview (or drag a box) to attach it to your message.</sub>
+
 - **CC Terminal tab:** the full, interactive Claude Code terminal, next to Global JS. The session keeps running when you reload the page.
+
+![The CC Terminal tab running Claude Code inside the LiveCanvas editor](docs/media/terminal.jpg)
+<sub>CC Terminal: the full Claude Code terminal, inside the builder.</sub>
+
 - **livecanvas tools for Claude:** Claude reads and edits the *open, unsaved* builder:
   - page HTML, scoped to the element you've selected
   - Global CSS and Global JS
@@ -36,6 +49,10 @@ Unofficial WordPress plugin that connects the [LiveCanvas](https://livecanvas.co
   - `lc_responsive_check`: renders the page at 390, 768, 1200 and 1440px and runs layout detectors: sideways scrolling and its cause, elements wider than the screen, overlapping text, small tap targets (WCAG 2.5.8 and a 44px touch target on phones), text under 12px, images overflowing or missing their size, and clipped content. It returns one side-by-side image with the problems outlined and numbered.
   - `lc_lint`: checks the selection, a page or the whole site against the site's own design system: inline styles (with the Bootstrap utility that does the same), colours that aren't your tokens (with the matching `var()`), spacing off Bootstrap's scale, heading order, missing alt text and image sizes, empty links, duplicate ids, and classes that are defined nowhere (typos).
   - **An auto-generated site brief** in the site's `CLAUDE.md` (a managed block that never touches your own notes), so every Claude Code session starts out knowing the stack.
+
+![A responsive check: the page at 390, 768, 1200 and 1440px side by side, with problems outlined, and Claude's summary](docs/media/responsive-check.jpg)
+<sub><code>lc_responsive_check</code>: every width in one image, problems outlined and numbered.</sub>
+
 - **Site building, with preview then apply:** Claude can work on the rest of the site, even without the builder open:
   - pages: list, read, create drafts, update, move to the bin, open in the builder
   - the site-wide header, footer and saved Global JS
@@ -49,6 +66,13 @@ Unofficial WordPress plugin that connects the [LiveCanvas](https://livecanvas.co
   - `lc_html_template_assets` copies the template's own CSS, JS and fonts into the **child theme**, with a managed enqueue block in `functions.php`, and imports its images into the **media library**. Undo removes exactly what it added. You can scope the template's CSS under `.tpl-<name>` so it can't clash with Bootstrap.
   - `lc_html_template_preview` and `lc_compare` render the original template next to the rebuilt section at 1200 and 390px, with the differences highlighted and a pixel-difference score.
   - Everything imported lives in the theme and media library, so the site keeps working after you delete this plugin.
+
+![lc_compare: the original template section, the rebuilt section and a difference map, scored 8.2%](docs/media/template-compare.jpg)
+<sub><code>lc_compare</code>: the original template section, the rebuilt one and the differences, with a score.</sub>
+
+![The template library settings: folders of templates and the names Claude uses for them](docs/media/template-library.png)
+<sub>The template library: register your template folders once, and Claude finds templates by name.</sub>
+
 - **Migrate from an old site:**
   - `lc_migrate_scan` crawls the old site politely: sitemap first, `robots.txt` honoured, one request at a time. It stores the crawl locally, and a big site continues over several calls.
   - **Per page** it captures:
@@ -73,6 +97,10 @@ Unofficial WordPress plugin that connects the [LiveCanvas](https://livecanvas.co
   - **Forms:** which form plugin each uses and who its notifications go to (a developer or test address gets flagged).
   - **Basics:** favicon, 404 page, privacy policy page, cookie consent versus analytics, `WP_DEBUG`, WordPress's default content, permalinks.
   - **Launch mode** (`launch: true`) adds a go-live checklist and writes `launch-report.md` to the site root.
+
+![The /qa command's findings for a page: accessibility and SEO, prioritised](docs/media/qa.jpg)
+<sub><code>/qa</code>: a prioritised fix list from axe-core and the site checks.</sub>
+
 - **Section library:** list, read, create and update LiveCanvas's reusable sections, see where each is used, and swap inline copies on pages for the section's shortcode (`lc_section_replace_inline`).
 - **Design tokens (Picostrap):**
   - Claude reads and changes the theme's SCSS variables (colours, fonts, sizes, `$enable-*` switches) and web-font links, with a preview first.
@@ -85,6 +113,10 @@ Unofficial WordPress plugin that connects the [LiveCanvas](https://livecanvas.co
   - Every applied site-level change is stored in an audit log with its before-copy.
   - Browse it in **Tools › Claude Code › Activity**, where each change has a before/after diff, or from the **Activity** button in CC Chat.
   - Undo any change with one click, or ask Claude (`lc_audit_restore`). Undos are themselves undoable, and Claude is told when you undo something.
+
+![Tools › Claude Code › Activity: every site-level change with Details and Undo](docs/media/activity.png)
+<sub>Activity: every site-level change Claude applied, with one-click undo.</sub>
+
 - **Rollback:** before Claude's first change in each reply, the plugin saves a checkpoint of the page HTML, Global CSS and Global JS. **"↺ Restore to before this"** on your messages puts everything back. It also rewinds files Claude edited, such as theme files, using Claude Code's own file checkpoints.
 - **Works across sites:** one shared background service on your Mac serves every connected site. Each site only ever reaches its own builder.
 
@@ -93,6 +125,9 @@ It uses your own Claude Code installation and login. There's no API key, and the
 ## Commands and workflows
 
 Connect installs eight Claude Code commands in the site's `.claude/skills/`. They work in **CC Chat** (type `/` for the menu) and in **CC Terminal**, VS Code or any terminal opened in the site folder. They're refreshed on every Connect and removed on Disconnect; a skill of your own with the same name is never touched.
+
+![The / command menu in CC Chat](docs/media/command-menu.jpg)
+<sub>Type <code>/</code> in CC Chat for the commands.</sub>
 
 | Command | What it does |
 |---|---|
@@ -122,6 +157,9 @@ A typical project: `/kickoff` (or `/from-template`, or `/migrate`) → build and
 - Chrome or Firefox for the builder. Safari may block the local connection.
 
 ## Install
+
+![Tools › Claude Code: every check green and the site connected](docs/media/settings.png)
+<sub>Tools › Claude Code after Connect.</sub>
 
 1. Download `lc-claude-bridge-x.y.z.zip` from the [latest release](https://github.com/scbudgetweb/LiveCanvas-Claude-Bridge/releases/latest).
 2. In WordPress, go to Plugins › Add New › Upload Plugin, upload the zip and activate it.
