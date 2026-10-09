@@ -167,7 +167,7 @@ function lccb_store_preview( $tool, $kind, $target_type, $target_id, $summary, $
 		'changes'      => $changes['fields'],
 		'content_diff' => $changes['content_diff'],
 		'warnings'     => $warnings,
-		'next'         => 'Nothing has been written. Show the user what will change, then call lc_apply_change with this preview_id to apply it (valid 15 minutes).',
+		'next'         => 'Nothing has been written. Show the user what will change, then call lc_apply_change with this preview_id to apply it (valid 15 minutes). Applying writes to the site immediately (not a builder edit, no Save step).',
 	);
 }
 
@@ -500,6 +500,8 @@ function lccb_op_apply_change( array $args ) {
 		$restored = ! empty( $plan['restore_bundle'] );
 		return array(
 			'applied'  => true,
+			'live'     => 'Written to the site now (theme settings + CSS), separate from the builder: no lc_save needed.',
+			'refresh_preview_css' => $restored,
 			'summary'  => $plan['summary'],
 			'audit_id' => $audit_id,
 			'undo'     => "lc_audit_restore {\"id\": $audit_id} previews undoing this.",
@@ -513,7 +515,7 @@ function lccb_op_apply_change( array $args ) {
 		}
 		delete_transient( 'lccb_preview_' . $id );
 		$audit_id = lccb_audit_record( 'lc_audit_restore', 'media', $att, $plan['summary'], array( 'attachment' => $att ), null, 'claude', $restored_from );
-		return array( 'applied' => true, 'summary' => $plan['summary'], 'audit_id' => $audit_id );
+		return array( 'applied' => true, 'live' => 'Deleted from the media library now.', 'summary' => $plan['summary'], 'audit_id' => $audit_id );
 	}
 
 	$target_id = (int) $plan['target_id'];
@@ -551,6 +553,7 @@ function lccb_op_apply_change( array $args ) {
 
 	$out = array(
 		'applied'  => true,
+		'live'     => 'Written to the site now: this is a site-level change, separate from the builder (no lc_save needed, and the builder\'s Save/undo don\'t cover it).',
 		'summary'  => $plan['summary'],
 		'audit_id' => $audit_id,
 		'undo'     => "lc_audit_restore {\"id\": $audit_id} previews undoing this.",

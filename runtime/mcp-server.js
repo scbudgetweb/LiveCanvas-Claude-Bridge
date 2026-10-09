@@ -296,7 +296,17 @@ serverTool("lc_template_upsert", "Plan creating (no id: title + conditions requi
 serverTool("lc_audit_list", "List recent site-level changes applied through lc_apply_change or lc_media_import (newest first), each with an audit id usable with lc_audit_restore.", { limit: z.number().int().optional(), target_type: z.enum(["page", "partial", "template", "tokens", "media"]).optional(), target_id: z.number().int().optional() }, "audit_list");
 serverTool("lc_audit_restore", "Plan undoing an audited change: puts the item back exactly as it was before that change (or moves it to the bin if that change created it)." + PREVIEW_NOTE, { id: z.number().int() }, "audit_restore", previewText);
 
-serverTool("lc_apply_change", "Apply a change previewed by lc_page_create / lc_page_update / lc_partial_update / lc_template_upsert / lc_audit_restore. Refuses if the target changed since the preview. The previous version is kept in the audit log (undo with lc_audit_restore).", { preview_id: z.string() }, "apply_change");
+server.registerTool("lc_apply_change", {
+	description: "Apply a change previewed by lc_page_create / lc_page_update / lc_partial_update / lc_template_upsert / lc_tokens_update / lc_audit_restore. It writes to the site IMMEDIATELY (unlike builder edits, there's no Save step). Refuses if the target changed since the preview. The previous version is kept in the audit log (undo with lc_audit_restore).",
+	inputSchema: { preview_id: z.string() },
+}, async (args) => {
+	const r = await wpRun("apply_change", args);
+	// A token undo puts the old CSS bundle back: point the open preview at it (best effort).
+	if (r && r.refresh_preview_css) {
+		try { await call("refresh_css", {}); r.preview_css_refreshed = true; } catch (_) { r.preview_css_refreshed = false; }
+	}
+	return json(r);
+});
 
 // ───────────────────────── Design tokens (Picostrap) + CSS recompile ─────────────────────────
 

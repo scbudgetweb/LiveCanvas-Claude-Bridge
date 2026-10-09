@@ -53,7 +53,8 @@ function lccb_site_brief_markdown() {
 	$out[] = '- Use the **livecanvas** MCP tools for builder content. Start with `lc_get_context` (what\'s open and selected), or `lc_site_context` for the whole site.';
 	$out[] = '- Read before editing (`lc_read_html` / `lc_read_css`) and prefer `lc_edit_*` (exact replacements) over rewriting.';
 	$out[] = '- After visual changes, check them with `lc_screenshot` (try a mobile width such as 412). Use `lc_inspect` to see rendered markup, computed styles and which CSS rules win, e.g. for shortcode or plugin output.';
-	$out[] = '- Builder edits are live but **not saved**. Only call `lc_save` when the user asks.';
+	$out[] = '- Builder edits (`lc_edit_html`, `lc_edit_css`, …) are live in the preview but **not saved**. Only call `lc_save` when the user asks.';
+	$out[] = '- Site-level changes (pages, header/footer, templates, design tokens, media) are previewed first, and `lc_apply_change` writes them to the site **immediately**. They don\'t need `lc_save`, and the builder\'s Save or undo doesn\'t cover them. Undo them with `lc_audit_restore`.';
 	$out[] = '- If the user restores a checkpoint, re-read before editing again.';
 	$conv = $d['conventions'];
 	if ( $conv['classes_in_global_css'] || $conv['custom_properties'] ) {

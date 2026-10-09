@@ -143,7 +143,7 @@ function lccb_op_tokens_update( array $args ) {
 		'changes'      => $lines,
 		'content_diff' => '',
 		'warnings'     => array( 'After applying, run lc_css_recompile to rebuild the theme CSS (the site keeps the old CSS until then).' ),
-		'next'         => 'Nothing has been written. Show the user the changes, then call lc_apply_change with this preview_id (valid 15 minutes).',
+		'next'         => 'Nothing has been written. Show the user the changes, then call lc_apply_change with this preview_id (valid 15 minutes). Applying writes the theme settings immediately (no Save step); the site keeps its current CSS until lc_css_recompile.',
 	);
 }
 

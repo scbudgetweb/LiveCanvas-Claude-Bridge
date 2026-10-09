@@ -304,18 +304,12 @@
 			} finally {
 				frame.remove();
 			}
-			// Point the preview's theme stylesheet(s) at the fresh file.
-			let refreshed = 0;
-			const pdoc = document.getElementById("previewiframe") && document.getElementById("previewiframe").contentDocument;
-			if (pdoc) {
-				pdoc.querySelectorAll('link[rel="stylesheet"][href*="css-output/"]').forEach((link) => {
-					const u = new URL(link.href);
-					u.searchParams.set("lccb", Date.now());
-					link.href = u.toString();
-					refreshed++;
-				});
-			}
-			return { seconds: Math.round((Date.now() - started) / 1000), feedback, preview_refreshed: refreshed > 0 };
+			return { seconds: Math.round((Date.now() - started) / 1000), feedback, preview_refreshed: refreshPreviewCss() > 0 };
+		},
+
+		/** Re-fetch the theme's compiled CSS in the preview (after a recompile or a token undo). */
+		async refresh_css() {
+			return { refreshed: refreshPreviewCss() };
 		},
 
 		async save() {
@@ -323,6 +317,20 @@
 			return { triggered: true, note: "Save triggered (HTML, Global CSS and Global JS)." };
 		},
 	};
+
+	function refreshPreviewCss() {
+		let n = 0;
+		const iframe = document.getElementById("previewiframe");
+		const pdoc = iframe && iframe.contentDocument;
+		if (!pdoc) return 0;
+		pdoc.querySelectorAll('link[rel="stylesheet"][href*="css-output/"]').forEach((link) => {
+			const u = new URL(link.href);
+			u.searchParams.set("lccb", Date.now());
+			link.href = u.toString();
+			n++;
+		});
+		return n;
+	}
 
 	// ───────────────────────── Inspect helpers ─────────────────────────
 
