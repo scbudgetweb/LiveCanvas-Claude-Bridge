@@ -525,6 +525,8 @@ function lccb_connect( $force_reinstall = false ) {
 		return $fail();
 	}
 	lccb_audit_install();
+	$skills = lccb_skills_install();
+	$step( (bool) $skills['installed'], 'Claude Code commands: /' . implode( ', /', $skills['installed'] ) . ( $skills['skipped'] ? ' (kept your own: /' . implode( ', /', $skills['skipped'] ) . ')' : '' ) );
 	$brief = lccb_write_site_brief();
 	$step( (bool) $brief, $brief ? 'Site brief written to CLAUDE.md (managed block)' : 'Could not write CLAUDE.md' );
 	update_option( LCCB_BINDING_OPTION, lccb_binding_value(), false );
@@ -544,6 +546,7 @@ function lccb_connect( $force_reinstall = false ) {
 function lccb_disconnect() {
 	$remaining = lccb_unregister_site();
 	lccb_remove_claude_config();
+	lccb_skills_remove();
 	lccb_remove_site_brief();
 	delete_option( LCCB_BINDING_OPTION );
 	if ( 0 === $remaining ) {

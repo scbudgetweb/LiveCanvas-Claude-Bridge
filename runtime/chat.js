@@ -201,7 +201,8 @@ export function createChat({ loadConfig, log, notifyEditor = () => {} }) {
 				if (e.subtype === "init") {
 					s.sessionId = e.session_id;
 					// The tool and slash-command lists are huge; keep what the UI needs.
-					emit(s, { type: "system", subtype: "init", session_id: e.session_id, model: e.model, permissionMode: e.permissionMode, cwd: e.cwd });
+					s.commands = Array.isArray(e.slash_commands) ? e.slash_commands.filter((c) => typeof c === "string").slice(0, 150) : [];
+					emit(s, { type: "system", subtype: "init", session_id: e.session_id, model: e.model, permissionMode: e.permissionMode, cwd: e.cwd, commands: s.commands });
 					pushState(s);
 					return;
 				}

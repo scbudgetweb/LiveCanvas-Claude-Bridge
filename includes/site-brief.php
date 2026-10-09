@@ -68,6 +68,7 @@ function lccb_site_brief_markdown() {
 	$out[] = '- **Migrating from an old site:** `lc_migrate_scan {url}` (polite crawl, stored locally; call again to continue) → `lc_migrate_site` (page tree, page types, menu, contact details) → per page `lc_migrate_page` + `lc_media_import_batch`, rebuilt in this site\'s design system with its SEO title and description → `lc_redirect_map` for the old URLs.';
 	$out[] = '- **Images:** `lc_image_audit` (sizes vs display, format, alt, lazy) → `lc_image_optimise` (WebP/AVIF as new media items, every reference rewritten, originals kept) · `lc_media_read` to look at an image, `lc_media_update` to save alt text (also fills it into pages) · `lc_image_crop` for a cropped copy · `lc_stock_search` / `lc_stock_import` for openly licensed photos (credit kept in the caption).';
 	$out[] = '- **Quality and launch:** `lc_qa` (page or site: accessibility via axe-core, SEO, performance, links, forms, basics) gives a prioritised fix list; `lc_qa {scope: "site", launch: true}` adds the go-live checklist and writes launch-report.md.';
+	$out[] = '- **Commands** (the user can type them in CC Chat or the terminal): `/kickoff`, `/from-template`, `/migrate`, `/responsive`, `/images`, `/qa`, `/launch`, `/handover`.';
 	$out[] = '- **Reusable sections** live in LiveCanvas\'s section library (`lc_sections_list`). Embed one with its shortcode rather than copying its HTML; `lc_section_replace_inline` swaps existing copies.';
 	$conv = $d['conventions'];
 	if ( $conv['classes_in_global_css'] || $conv['custom_properties'] ) {

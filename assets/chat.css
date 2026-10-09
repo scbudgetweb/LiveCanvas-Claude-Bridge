@@ -605,3 +605,40 @@ a.lccb-chat-btn { display: inline-flex; align-items: center; text-decoration: no
 }
 .lccb-chat-pointed { margin: 0; display: flex; flex-direction: column; gap: 2px; }
 .lccb-chat-pointed figcaption { font: 11px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--lccb-muted); max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ───────── / command menu ───────── */
+.lccb-chat-cmdmenu {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 100%;
+	margin-bottom: 4px;
+	max-height: 320px;
+	overflow-y: auto;
+	z-index: 20;
+	padding: 4px;
+	border: 1px solid rgba(255, 255, 255, 0.15);
+	border-radius: 8px;
+	background: var(--lccb-bg-raised, #26262e);
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+.lccb-chat-cmdmenu[hidden] { display: none; }
+.lccb-chat-cmd {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	width: 100%;
+	padding: 6px 8px;
+	border: 0;
+	border-radius: 5px;
+	background: none;
+	color: inherit;
+	font-size: 12.5px;
+	text-align: left;
+	cursor: pointer;
+}
+.lccb-chat-cmd strong { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 600; white-space: nowrap; }
+.lccb-chat-cmd.is-ours strong { color: var(--lccb-accent, #d97757); }
+.lccb-chat-cmd em { color: var(--lccb-muted); font-style: normal; font-size: 11.5px; white-space: nowrap; }
+.lccb-chat-cmd span { color: var(--lccb-muted); font-size: 11.5px; margin-left: auto; text-align: right; }
+.lccb-chat-cmd.is-sel, .lccb-chat-cmd:hover { background: rgba(255, 255, 255, 0.08); }

@@ -90,6 +90,23 @@ Unofficial WordPress plugin that connects the [LiveCanvas](https://livecanvas.co
 
 It uses your own Claude Code installation and login. There's no API key, and the plugin never sees your credentials.
 
+## Commands and workflows
+
+Connect installs eight Claude Code commands in the site's `.claude/skills/`. They work in **CC Chat** (type `/` for the menu) and in **CC Terminal**, VS Code or any terminal opened in the site folder. They're refreshed on every Connect and removed on Disconnect; a skill of your own with the same name is never touched.
+
+| Command | What it does |
+|---|---|
+| `/kickoff <brief>` | Questions → sitemap → design tokens → header and footer → draft pages, with your approval at each step |
+| `/from-template <template> [pages]` | Rebuilds pages from a template in your library: tokens, assets, header/footer, pages, and a visual comparison of each section with the original |
+| `/migrate <old site URL>` | Crawls the old site, proposes the new sitemap, rebuilds each page in the new design with its images and SEO, then writes the redirect map |
+| `/responsive [page \| site]` | Checks phone, tablet and desktop layouts and fixes what's broken |
+| `/images [page \| site]` | Converts heavy images to WebP at the right size, writes missing alt text by looking at each image, and adds dimensions and lazy-loading |
+| `/qa [page \| site]` | The quality pass (accessibility, SEO, performance, links, forms, basics), critical items fixed first |
+| `/launch` | Launch-mode quality pass, the go-live checklist and `launch-report.md` |
+| `/handover [client]` | A friendly handover pack for the client: what was built, how to edit it in LiveCanvas, where forms send |
+
+A typical project: `/kickoff` (or `/from-template`, or `/migrate`) → build and refine in the builder, pointing at things with Ask mode → `/responsive` and `/images` → `/qa` → `/launch` → `/handover`.
+
 ## Requirements
 
 - macOS (Apple Silicon or Intel)

@@ -135,6 +135,7 @@
 			case "system":
 				if (e.subtype === "init") {
 					st.cwd = e.cwd;
+					if (Array.isArray(e.commands)) st.commands = e.commands;
 					append(h("div", { class: "lccb-chat-meta", text: `${e.model} · ${MODE_LABELS[e.permissionMode] || e.permissionMode}` }));
 				}
 				return;
@@ -742,6 +743,69 @@
 		return p.tag + cls;
 	}
 
+	// ───────────────────────── / commands ─────────────────────────
+
+	// The site's packaged workflows (installed on Connect), first and described; then Claude Code's own commands.
+	const OUR_COMMANDS = {
+		kickoff: ["brief", "Start a new site: questions, sitemap, tokens, header/footer, draft pages"],
+		"from-template": ["template [pages]", "Build pages from a template in your library"],
+		migrate: ["old-site-url", "Move an old site's content here, with redirects"],
+		responsive: ["[page | site]", "Check phone/tablet/desktop layouts and fix them"],
+		images: ["[page | site]", "Optimise images and write missing alt text"],
+		qa: ["[page | site]", "Accessibility, SEO, performance, links, forms"],
+		launch: ["", "Pre-launch check, go-live checklist and report"],
+		handover: ["[client]", "Write the client handover pack"],
+	};
+	const HIDE_COMMANDS = /^(clear|exit|quit|login|logout|vim|terminal-setup|ide|install-github-app|bug|doctor|upgrade|resume|config|theme|statusline|status|mcp|permissions|hooks|agents|add-dir|export|release-notes|privacy-settings|keybindings)$/;
+	let cmdSel = 0;
+
+	function commandList(prefix) {
+		const p = prefix.toLowerCase();
+		const ours = Object.keys(OUR_COMMANDS).map((name) => ({ name, hint: OUR_COMMANDS[name][0], desc: OUR_COMMANDS[name][1], ours: true }));
+		const theirs = (st.commands || []).filter((c) => !OUR_COMMANDS[c] && !HIDE_COMMANDS.test(c)).map((name) => ({ name, hint: "", desc: "" }));
+		return ours.concat(theirs).filter((c) => c.name.toLowerCase().startsWith(p)).slice(0, 12);
+	}
+
+	function updateCommandMenu() {
+		const m = /^\/([\w:-]*)$/.exec(els.input.value);
+		const list = m ? commandList(m[1]) : [];
+		els.cmdMenu.hidden = !list.length;
+		if (!list.length) return;
+		cmdSel = Math.min(cmdSel, list.length - 1);
+		els.cmdMenu.textContent = "";
+		list.forEach((c, i) => {
+			els.cmdMenu.append(h("button", { type: "button", class: "lccb-chat-cmd" + (i === cmdSel ? " is-sel" : "") + (c.ours ? " is-ours" : ""), onmousedown: (e) => { e.preventDefault(); pickCommand(c); } },
+				h("strong", { text: "/" + c.name }), c.hint ? h("em", { text: " " + c.hint }) : null, c.desc ? h("span", { text: c.desc }) : null));
+		});
+	}
+
+	function pickCommand(c) {
+		els.input.value = "/" + c.name + " ";
+		els.cmdMenu.hidden = true;
+		els.input.focus();
+		autosize();
+	}
+
+	/** Arrow keys / Tab / Enter / Esc while the menu is open. @return true if handled */
+	function commandMenuKey(ev) {
+		if (els.cmdMenu.hidden) return false;
+		const items = els.cmdMenu.querySelectorAll(".lccb-chat-cmd");
+		if (ev.key === "ArrowDown" || ev.key === "ArrowUp") {
+			cmdSel = (cmdSel + (ev.key === "ArrowDown" ? 1 : items.length - 1)) % items.length;
+			updateCommandMenu();
+			return true;
+		}
+		if (ev.key === "Tab" || (ev.key === "Enter" && !ev.shiftKey)) {
+			const m = /^\/([\w:-]*)$/.exec(els.input.value);
+			const list = m ? commandList(m[1]) : [];
+			if (list[cmdSel] && "/" + list[cmdSel].name !== els.input.value.trim()) { pickCommand(list[cmdSel]); return true; }
+			els.cmdMenu.hidden = true;
+			return ev.key === "Tab";
+		}
+		if (ev.key === "Escape") { els.cmdMenu.hidden = true; return true; }
+		return false;
+	}
+
 	// ───────────────────────── Ask mode (point at it) ─────────────────────────
 
 	function addPointed(promise) {
@@ -820,7 +884,7 @@
 
 		els.log = h("div", { class: "lccb-chat-log" });
 		els.notice = h("div", { class: "lccb-chat-notice", hidden: true });
-		els.input = h("textarea", { class: "lccb-chat-input", rows: 1, placeholder: "Message Claude…  (Enter to send, Shift+Enter for a new line, Esc to stop)" });
+		els.input = h("textarea", { class: "lccb-chat-input", rows: 1, placeholder: "Message Claude, or / for commands…  (Enter to send, Shift+Enter for a new line, Esc to stop)" });
 		els.send = h("button", { type: "button", class: "lccb-chat-send", onclick: submit }, "Send");
 		els.footer = h("div", { class: "lccb-chat-footer" });
 		els.waiting = h("div", { class: "lccb-chat-waiting", hidden: true });
@@ -840,8 +904,11 @@
 			if (files.length) { ev.preventDefault(); addFiles(files); }
 		});
 
-		els.input.addEventListener("input", autosize);
+		els.cmdMenu = h("div", { class: "lccb-chat-cmdmenu", hidden: true, role: "listbox" });
+		els.input.addEventListener("input", () => { autosize(); cmdSel = 0; updateCommandMenu(); });
+		els.input.addEventListener("blur", () => setTimeout(() => { els.cmdMenu.hidden = true; }, 150));
 		els.input.addEventListener("keydown", (ev) => {
+			if (commandMenuKey(ev)) { ev.preventDefault(); return; }
 			if (ev.key === "Enter" && !ev.shiftKey && !ev.isComposing) { ev.preventDefault(); submit(); }
 			else if (ev.key === "Escape" && window.lccbPoint && window.lccbPoint.active()) { ev.preventDefault(); toggleAsk(false); }
 			else if (ev.key === "Escape" && st.busy) { ev.preventDefault(); send({ t: "interrupt" }); }
@@ -857,7 +924,7 @@
 			els.log,
 			els.waiting,
 			els.attachNote,
-			h("div", { class: "lccb-chat-composer" }, els.attachRow, h("div", { class: "lccb-chat-composer-row" }, tools, els.input, els.send)),
+			h("div", { class: "lccb-chat-composer" }, els.cmdMenu, els.attachRow, h("div", { class: "lccb-chat-composer-row" }, tools, els.input, els.send)),
 			els.footer);
 
 		// Drop images anywhere on the panel.

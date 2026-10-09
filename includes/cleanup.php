@@ -155,6 +155,14 @@ function lccb_cleanup() {
 		$steps[] = array( 'ok' => @unlink( lccb_site_root() . '/launch-report.md' ), 'text' => 'Deleted launch-report.md' );
 	}
 
+	// The packaged Claude Code commands (only the copies this plugin installed).
+	if ( function_exists( 'lccb_skills_remove' ) ) {
+		$n = lccb_skills_remove();
+		if ( $n ) {
+			$steps[] = array( 'ok' => true, 'text' => "Removed $n Claude Code command(s) from .claude/skills (your own skills kept)" );
+		}
+	}
+
 	// CLAUDE.md: only our managed block.
 	$brief = lccb_remove_site_brief();
 	if ( $brief ) {
