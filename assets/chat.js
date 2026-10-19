@@ -700,10 +700,32 @@
 	}
 
 	// Pinned above the composer so a pending approval can't be missed, however the log is scrolled.
+	// The pinned bar is a shortcut for when the approval is scrolled out of view: hide it while the approval itself is visible.
+	let waitingObserver = null;
+	let waitingInView = false;
+	function watchApprovalVisibility(req) {
+		if (waitingObserver) waitingObserver.disconnect();
+		waitingInView = false;
+		const card = req && approvals.get(req.request_id);
+		if (!card || !window.IntersectionObserver) return;
+		const target = card.querySelector(".lccb-chat-approval-actions, .lccb-chat-q-form") || card;
+		waitingObserver = new IntersectionObserver((entries) => {
+			waitingInView = entries.some((en) => en.isIntersecting);
+			els.waiting.hidden = waitingInView || !(st.pending || []).length;
+		}, { root: els.log, threshold: 0.9 });
+		waitingObserver.observe(target);
+	}
+
 	function updateWaiting() {
 		const req = (st.pending || [])[0];
 		els.waiting.hidden = !req;
-		if (!req) return;
+		if (!req) {
+			if (waitingObserver) waitingObserver.disconnect();
+			return;
+		}
+		// Showing the bar shortens the log: keep the newest content (usually this approval) in view if we were at the bottom.
+		requestAnimationFrame(() => scrollToEnd());
+		watchApprovalVisibility(req);
 		const p = R.presentTool(req.tool_name, req.input, { relPath });
 		els.waiting.textContent = "";
 		const reveal = () => { const card = approvals.get(req.request_id); if (card) { card.open = true; card.scrollIntoView({ block: "center", behavior: "smooth" }); } };
