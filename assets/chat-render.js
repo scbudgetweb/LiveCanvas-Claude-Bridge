@@ -215,6 +215,10 @@
 		const { server, tool } = splitName(name);
 		const rel = (p) => (ctx && ctx.relPath ? ctx.relPath(p) : p);
 
+		if (name === "AskUserQuestion") {
+			const qs = input && Array.isArray(input.questions) ? input.questions : [];
+			return { label: qs.length > 1 ? `${qs.length} questions for you` : "Question for you", arg: qs.map((q) => q.header || "").filter(Boolean).join(" · "), body: null, kind: "read" };
+		}
 		if (server === "livecanvas" && SITE_TOOLS[tool]) {
 			const [label, argOf, kind] = SITE_TOOLS[tool];
 			return { label: typeof label === "function" ? label(input) : label, arg: argOf(input) || "", body: null, kind: kind || "read" };

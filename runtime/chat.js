@@ -349,19 +349,37 @@ export function createChat({ loadConfig, log, notifyEditor = () => {} }) {
 		pushState(s);
 	}
 
+	/** Only answers to the questions actually asked; labels or the user's own text, trimmed. */
+	function questionAnswers(input, given) {
+		const out = {};
+		const questions = input && Array.isArray(input.questions) ? input.questions : [];
+		for (const q of questions) {
+			const v = given && typeof given === "object" ? given[q.question] : undefined;
+			const list = (Array.isArray(v) ? v : [v]).filter((x) => typeof x === "string" && x.trim()).map((x) => x.trim().slice(0, 2000)).slice(0, 8);
+			if (!list.length) continue;
+			out[q.question] = q.multiSelect ? list : list[0];
+		}
+		return out;
+	}
+
 	function onApprove(s, msg) {
 		const req = s.pending.get(msg.request_id);
 		if (!req) return;
 		s.pending.delete(msg.request_id);
 		let response;
+		let answered = null;
 		if (msg.decision === "deny") {
 			response = { behavior: "deny", message: String(msg.message || "").trim() || "The user denied this action." };
+		} else if (req.tool_name === "AskUserQuestion") {
+			// Clarifying questions: the answers travel back in the tool input, keyed by each question's text.
+			answered = questionAnswers(req.input, msg.answers);
+			response = { behavior: "allow", updatedInput: { ...req.input, answers: answered } };
 		} else {
 			response = { behavior: "allow", updatedInput: req.input };
 			if (msg.decision === "allow_session" && Array.isArray(req.permission_suggestions)) response.updatedPermissions = req.permission_suggestions;
 		}
 		write(s, { type: "control_response", response: { subtype: "success", request_id: req.request_id, response } });
-		emit(s, { type: "hub", subtype: "approval_resolved", request_id: req.request_id, decision: msg.decision, message: response.message || "" });
+		emit(s, { type: "hub", subtype: "approval_resolved", request_id: req.request_id, decision: msg.decision, message: response.message || "", answers: answered || undefined });
 		pushState(s);
 	}
 

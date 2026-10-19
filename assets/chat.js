@@ -225,6 +225,16 @@
 					if (card.dataset.kind !== "edit" && card.dataset.kind !== "todo") card.open = false; // only opened to ask
 				}
 				else { card.dataset.state = verdict; card.open = false; }
+				const form = card.querySelector(".lccb-chat-q-form");
+				if (form) {
+					// A question card: show what was chosen (or that it was skipped).
+					const lines = e.answers && Object.keys(e.answers).length
+						? Object.entries(e.answers).map(([q, a]) => h("div", {}, h("span", { class: "lccb-chat-q-asked", text: q + " " }), h("strong", { text: Array.isArray(a) ? a.join(", ") : a })))
+						: [h("div", { text: "Skipped" })];
+					form.replaceWith(h("div", { class: "lccb-chat-approval-outcome lccb-chat-q-answered" }, ...lines));
+					card.open = true;
+					return;
+				}
 				const outcome = e.decision === "deny" ? `Denied${e.message && e.message !== "The user denied this action." ? ": " + e.message : ""}` : e.decision === "allow_session" ? "Allowed for this session" : "Allowed";
 				const actions = card.querySelector(".lccb-chat-approval-actions");
 				if (actions) actions.replaceWith(h("div", { class: "lccb-chat-approval-outcome", text: outcome }));
@@ -302,8 +312,87 @@
 			deny);
 	}
 
+	/** Claude's clarifying questions (AskUserQuestion): choices to pick, an "Other" box, Send answers / Skip. */
+	function questionForm(req) {
+		const questions = (req.input && Array.isArray(req.input.questions) ? req.input.questions : []).slice(0, 4);
+		const picked = questions.map(() => new Set());
+		const other = questions.map(() => "");
+		const send = h("button", { type: "button", class: "is-primary", disabled: true }, questions.length > 1 ? "Send answers" : "Send answer");
+		const ready = () => questions.every((q, i) => picked[i].size || other[i].trim());
+		const refresh = () => { send.disabled = !ready(); };
+		const blocks = questions.map((q, i) => {
+			const multi = !!q.multiSelect;
+			const opts = (Array.isArray(q.options) ? q.options : []).slice(0, 6);
+			const buttons = [];
+			const otherInput = h("input", { type: "text", class: "lccb-chat-q-other", placeholder: "Other: type your own answer" });
+			otherInput.addEventListener("input", () => {
+				other[i] = otherInput.value;
+				if (!multi && other[i].trim()) { picked[i].clear(); buttons.forEach((b) => b.setAttribute("aria-checked", "false")); }
+				refresh();
+			});
+			otherInput.addEventListener("keydown", (ev) => { if (ev.key === "Enter" && ready()) { ev.preventDefault(); send.click(); } });
+			opts.forEach((o) => {
+				const b = h("button", { type: "button", class: "lccb-chat-q-opt", role: multi ? "checkbox" : "radio", "aria-checked": "false", onclick: () => {
+					if (multi) {
+						picked[i].has(o.label) ? picked[i].delete(o.label) : picked[i].add(o.label);
+					} else {
+						picked[i].clear();
+						picked[i].add(o.label);
+						otherInput.value = "";
+						other[i] = "";
+						buttons.forEach((x) => x.setAttribute("aria-checked", "false"));
+					}
+					b.setAttribute("aria-checked", picked[i].has(o.label) ? "true" : "false");
+					refresh();
+				} },
+					h("span", { class: "lccb-chat-q-mark", "aria-hidden": "true" }),
+					h("span", { class: "lccb-chat-q-text" },
+						h("strong", { text: o.label }),
+						o.description ? h("span", { text: o.description }) : null,
+						typeof o.preview === "string" && o.preview.trim() ? h("pre", { class: "lccb-chat-q-preview", text: o.preview.slice(0, 2000) }) : null));
+				buttons.push(b);
+			});
+			return h("fieldset", { class: "lccb-chat-q" },
+				h("legend", {},
+					q.header ? h("span", { class: "lccb-chat-q-header", text: q.header }) : null,
+					h("span", { text: q.question || "" }),
+					multi ? h("em", { text: " (choose any)" }) : null),
+				h("div", { class: "lccb-chat-q-opts" }, ...buttons),
+				otherInput);
+		});
+		send.addEventListener("click", () => {
+			if (!ready()) return;
+			const answers = {};
+			questions.forEach((q, i) => {
+				const vals = [...picked[i]];
+				if (other[i].trim()) vals.push(other[i].trim());
+				answers[q.question] = q.multiSelect ? vals : vals[0];
+			});
+			sendRaw({ t: "approve", request_id: req.request_id, decision: "allow", answers });
+		});
+		const skip = h("button", { type: "button", title: "Claude carries on without an answer; you can reply in the chat instead", onclick: () => approve(req.request_id, "deny", "The user skipped these questions and may answer in the chat instead.") }, "Skip");
+		return h("div", { class: "lccb-chat-q-form" }, ...blocks, h("div", { class: "lccb-chat-approval-actions" }, send, skip));
+	}
+
 	function renderApproval(req) {
 		if (approvals.has(req.request_id)) return;
+		if (req.tool_name === "AskUserQuestion") {
+			const entry = req.tool_use_id && tools.get(req.tool_use_id);
+			const form = questionForm(req);
+			let holder;
+			if (entry) {
+				entry.row.dataset.approval = "pending";
+				entry.row.open = true;
+				entry.row.append(form);
+				holder = entry.row;
+			} else {
+				holder = append(h("details", { class: "lccb-chat-approval", "data-state": "pending", open: true },
+					h("summary", { class: "lccb-chat-approval-title" }, h("strong", { text: "Claude has a question" })), form));
+			}
+			approvals.set(req.request_id, holder);
+			scrollToEnd(true);
+			return;
+		}
 		// Usually the tool row is already on screen: put the decision inside it (no duplicate diff).
 		const entry = req.tool_use_id && tools.get(req.tool_use_id);
 		if (entry) {
@@ -344,6 +433,8 @@
 	function approve(requestId, decision, message) {
 		send({ t: "approve", request_id: requestId, decision, message: message || "" });
 	}
+
+	function sendRaw(msg) { send(msg); }
 
 	// ───────────────────────── Context meter, cache chip, usage popover ─────────────────────────
 
@@ -615,6 +706,14 @@
 		if (!req) return;
 		const p = R.presentTool(req.tool_name, req.input, { relPath });
 		els.waiting.textContent = "";
+		const reveal = () => { const card = approvals.get(req.request_id); if (card) { card.open = true; card.scrollIntoView({ block: "center", behavior: "smooth" }); } };
+		if (req.tool_name === "AskUserQuestion") {
+			// A question needs answers, not an Allow: point at the card.
+			els.waiting.append(
+				h("span", { class: "lccb-chat-waiting-text", text: `Claude is asking you ${p.label.replace(" for you", "").toLowerCase().replace(/^question$/, "a question")}${p.arg ? " · " + p.arg : ""}` }),
+				h("button", { type: "button", class: "is-primary", onclick: reveal }, "Answer"));
+			return;
+		}
 		els.waiting.append(
 			h("span", { class: "lccb-chat-waiting-text", text: `Waiting for your approval: ${p.label}${p.arg ? " · " + p.arg : ""}` }),
 			h("button", { type: "button", class: "is-primary", onclick: () => approve(req.request_id, "allow") }, "Allow"),
