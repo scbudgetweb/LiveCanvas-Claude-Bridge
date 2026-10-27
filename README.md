@@ -4,6 +4,8 @@
 [![Licence: GPL v2 or later](https://img.shields.io/badge/licence-GPL--2.0--or--later-blue)](LICENSE)
 ![Platform: macOS](https://img.shields.io/badge/platform-macOS-lightgrey)
 
+<a href="https://buymeacoffee.com/shaunn"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy me a coffee" height="44"></a>
+
 Unofficial WordPress plugin that connects the [LiveCanvas](https://livecanvas.com) page builder to [Claude Code](https://claude.com/claude-code) on your Mac. Chat with Claude, or use a full terminal, right inside the LiveCanvas code editor. Claude edits your page, Global CSS and Global JS live, with one-click rollback.
 
 ![Pointing at a headline in the LiveCanvas preview and asking Claude to restyle it: Claude reads the page, edits the CSS and HTML, and the preview updates](docs/media/demo.gif)
